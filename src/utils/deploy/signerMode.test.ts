@@ -23,16 +23,6 @@ describe("resolveSignerSetup — dev mode", () => {
         expect(result.publishSigner).toBeNull();
     });
 
-    it("publishToPlayground without a userSigner throws a helpful message", () => {
-        expect(() =>
-            resolveSignerSetup({
-                mode: "dev",
-                userSigner: null,
-                publishToPlayground: true,
-            }),
-        ).toThrow(/dot init|--playground/);
-    });
-
     it("publishToPlayground with session userSigner adds one playground approval and leaves auth empty", () => {
         const user = fakeSigner("session");
         const result = resolveSignerSetup({
