@@ -138,14 +138,14 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
     // Playground publish always uses the user's signer so ownership ties to
     // their address — otherwise the registry would record a shared dev key
     // and the myApps view would be useless.
+    //
+    // userSigner is guaranteed non-null here: shouldResolveUserSigner() returns
+    // true whenever publishToPlayground is true, so resolveSigner() in the
+    // preflight has already either resolved a signer or thrown before we reach
+    // this point. The null guard that previously lived here was unreachable.
     let publishSigner: ResolvedSigner | null = null;
     if (opts.publishToPlayground) {
-        if (!opts.userSigner) {
-            throw new Error(
-                'Publishing to Playground requires a logged-in account. Run "dot init" first, or drop --playground.',
-            );
-        }
-        publishSigner = opts.userSigner;
+        publishSigner = opts.userSigner!;
         approvals.push({ phase: "playground", label: "Publish to Playground registry" });
     }
 
