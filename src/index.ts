@@ -18,6 +18,7 @@ import {
     setProcessGuardWarningHandler,
 } from "./utils/process-guard.js";
 import { clearWindowTitle } from "./utils/ui/theme/window-title.js";
+import { checkForUpdates, flushVersionCheck } from "./utils/version-check.js";
 
 const DEPLOY_DESCRIPTION =
     "Build the project, upload to Bulletin, register a .dot domain, and optionally publish to Playground";
@@ -115,6 +116,7 @@ program.addCommand(logoutCommand);
 program.addCommand(updateCommand);
 
 try {
+    checkForUpdates(pkg.version);
     await program.parseAsync();
 } catch (err) {
     if (process.exitCode === undefined || process.exitCode === 0) {
@@ -123,6 +125,7 @@ try {
     process.exitCode = 1;
 } finally {
     await flushTelemetry();
+    await flushVersionCheck();
 }
 
 process.exit(typeof process.exitCode === "number" ? process.exitCode : 0);
