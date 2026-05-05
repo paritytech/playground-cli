@@ -99,6 +99,24 @@ describe("resolveDefaultBranch", () => {
             resolveDefaultBranch({ owner: "foo", repo: "bar" }, { fetch: fetchImpl }),
         ).rejects.toThrow(/could not resolve a default branch/i);
     });
+
+    it("throws a private-or-missing error when the API returns 404 and probes fail", async () => {
+        const fetchImpl: typeof fetch = async () => new Response("Not Found", { status: 404 });
+        await expect(
+            resolveDefaultBranch({ owner: "foo", repo: "bar" }, { fetch: fetchImpl }),
+        ).rejects.toThrow(/private or does not exist/i);
+    });
+
+    it("throws a private-or-missing error when the API returns 401 and probes fail", async () => {
+        const fetchImpl: typeof fetch = async (url) => {
+            if (String(url).startsWith("https://api.github.com"))
+                return new Response("Unauthorized", { status: 401 });
+            return new Response("Not Found", { status: 404 });
+        };
+        await expect(
+            resolveDefaultBranch({ owner: "foo", repo: "bar" }, { fetch: fetchImpl }),
+        ).rejects.toThrow(/private or does not exist/i);
+    });
 });
 
 describe("downloadGitHubTarball", () => {

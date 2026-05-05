@@ -37,14 +37,16 @@ export async function resolveDefaultBranch(
     opts: FetchOpts = {},
 ): Promise<string> {
     const f = opts.fetch ?? fetch;
+    let apiStatus: number | undefined;
     try {
         const res = await f(`https://api.github.com/repos/${ref.owner}/${ref.repo}`);
+        apiStatus = res.status;
         if (res.ok) {
             const body = (await res.json()) as { default_branch?: string };
             if (body.default_branch) return body.default_branch;
         }
     } catch {
-        // fall through to the heuristic probes
+        // network error — fall through to the heuristic probes
     }
     for (const candidate of ["main", "master"]) {
         try {
@@ -53,6 +55,11 @@ export async function resolveDefaultBranch(
         } catch {
             // try next
         }
+    }
+    if (apiStatus === 404 || apiStatus === 401) {
+        throw new Error(
+            `Repository ${ref.owner}/${ref.repo} is private or does not exist — dot mod only supports public repositories`,
+        );
     }
     throw new Error(
         `Could not resolve a default branch for ${ref.owner}/${ref.repo} — pin one in metadata.branch`,

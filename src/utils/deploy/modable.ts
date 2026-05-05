@@ -10,6 +10,7 @@
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { commandExists, TOOL_STEPS } from "../toolchain.js";
+import { parseGitHubRepoUrl } from "../mod/source.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -85,9 +86,48 @@ export interface ResolveRepoOptions {
     cwd: string;
     repoName: string | null;
     onLog?: (line: string) => void;
+    fetch?: typeof fetch;
+}
+
+/**
+ * Verifies that a GitHub repository URL is publicly accessible.
+ * Throws ModablePreflightError for private or missing repos.
+ * Skips silently for non-GitHub URLs or when the API is unreachable.
+ */
+export async function assertPublicGitHubRepo(
+    url: string,
+    f: typeof fetch = fetch,
+): Promise<void> {
+    const ref = parseGitHubRepoUrl(url);
+    if (!ref) return;
+
+    let res: Response;
+    try {
+        res = await f(`https://api.github.com/repos/${ref.owner}/${ref.repo}`);
+    } catch {
+        return; // network error — can't verify, let downstream fail
+    }
+
+    if (res.ok) {
+        const body = (await res.json()) as { private?: boolean };
+        if (body.private) {
+            throw new ModablePreflightError(
+                `${ref.owner}/${ref.repo} is a private repository — modable apps must use a public repository so users can clone the source`,
+            );
+        }
+        return;
+    }
+
+    if (res.status === 404 || res.status === 401) {
+        throw new ModablePreflightError(
+            `${ref.owner}/${ref.repo} is private or does not exist — modable apps must use a public repository`,
+        );
+    }
+    // other non-ok status (rate limit, server error) — skip check
 }
 
 export async function resolveRepositoryUrl(opts: ResolveRepoOptions): Promise<string> {
+    const f = opts.fetch ?? fetch;
     const action = decideRepositoryAction({
         originUrl: readOrigin(opts.cwd),
         repoName: opts.repoName,
@@ -99,6 +139,7 @@ export async function resolveRepositoryUrl(opts: ResolveRepoOptions): Promise<st
     }
     if (action.kind === "use-origin") {
         opts.onLog?.(`using existing origin (${action.url})…`);
+        await assertPublicGitHubRepo(action.url, f);
         return action.url;
     }
 
