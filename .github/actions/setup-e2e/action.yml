@@ -22,7 +22,7 @@ runs:
         - name: Install Kubo (IPFS)
           shell: bash
           run: |
-              wget -q https://dist.ipfs.tech/kubo/v0.32.1/kubo_v0.32.1_linux-amd64.tar.gz
+              curl -fsSL -o kubo_v0.32.1_linux-amd64.tar.gz https://dist.ipfs.tech/kubo/v0.32.1/kubo_v0.32.1_linux-amd64.tar.gz
               tar xf kubo_v0.32.1_linux-amd64.tar.gz
               sudo mv kubo/ipfs /usr/local/bin/
               ipfs init --profile=test
