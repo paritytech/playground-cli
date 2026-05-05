@@ -94,10 +94,7 @@ export interface ResolveRepoOptions {
  * Throws ModablePreflightError for private or missing repos.
  * Skips silently for non-GitHub URLs or when the API is unreachable.
  */
-export async function assertPublicGitHubRepo(
-    url: string,
-    f: typeof fetch = fetch,
-): Promise<void> {
+export async function assertPublicGitHubRepo(url: string, f: typeof fetch = fetch): Promise<void> {
     const ref = parseGitHubRepoUrl(url);
     if (!ref) return;
 

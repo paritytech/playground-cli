@@ -90,8 +90,7 @@ describe("assertPublicGitHubRepo", () => {
     });
 
     it("skips check for rate-limit (403) responses", async () => {
-        const mockFetch: typeof fetch = async () =>
-            new Response("rate limited", { status: 403 });
+        const mockFetch: typeof fetch = async () => new Response("rate limited", { status: 403 });
         await expect(
             assertPublicGitHubRepo("https://github.com/foo/bar", mockFetch),
         ).resolves.toBeUndefined();
