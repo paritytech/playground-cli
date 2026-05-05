@@ -9,7 +9,7 @@ on:
 jobs:
     format:
         name: Format
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -21,7 +21,7 @@ jobs:
 
     unit-tests:
         name: Unit Tests
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4

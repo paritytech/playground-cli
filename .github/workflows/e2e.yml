@@ -21,7 +21,7 @@ concurrency:
 jobs:
     test-no-publish:
         name: "E2E · ${{ matrix.cell }}"
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 25
         strategy:
             fail-fast: false
@@ -81,7 +81,7 @@ jobs:
 
     test-publish:
         name: "E2E · ${{ matrix.cell }}"
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 55
         strategy:
             fail-fast: false
@@ -136,7 +136,7 @@ jobs:
     test-nightly-publish:
         name: "E2E · ${{ matrix.cell }}"
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 55
         strategy:
             fail-fast: false
@@ -190,7 +190,7 @@ jobs:
     test-nightly-no-publish:
         name: "E2E · ${{ matrix.cell }}"
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 25
         strategy:
             fail-fast: false
@@ -251,7 +251,7 @@ jobs:
         name: E2E Report
         needs: [test-no-publish, test-publish, test-nightly-no-publish, test-nightly-publish]
         if: always()
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 5
         steps:
             - name: Download JUnit + forensic artefacts

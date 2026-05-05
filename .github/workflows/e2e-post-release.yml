@@ -16,7 +16,7 @@ jobs:
     smoke:
         name: "E2E · post-release-smoke"
         if: github.event.release.prerelease != true || github.event_name == 'workflow_dispatch'
-        runs-on: ubuntu-latest
+        runs-on: ${{ github.repository_owner == 'paritytech' && 'parity-default' || 'ubuntu-latest' }}
         timeout-minutes: 15
         env:
             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
