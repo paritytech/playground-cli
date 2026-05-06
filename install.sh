@@ -12,36 +12,24 @@ ASSET="$BIN-$OS-$ARCH"
 
 # 2) Resolve release tag
 #
-#   When 100s of attendees install at the same hackathon they share one
-#   public IP and would burn through GitHub's 60/hour anonymous-IP API
-#   quota almost immediately. Both resolution paths below are NOT
-#   `api.github.com` so neither contributes to that quota:
-#
-#     a) jsDelivr's /resolved endpoint mirrors GitHub releases via a CDN
-#        — same source `dot update` uses for the version-check banner.
-#        Response shape: `{ "version": "0.17.0" }`.
-#     b) github.com redirect probe — GitHub redirects
-#        `releases/latest` → `releases/tag/vX.Y.Z`; we read the tag from
-#        the `Location:` header. No body, no API call.
-#
-#   We try jsDelivr first because we already trust it from `dot update`.
-#   The github.com redirect is the fallback for the rare case jsDelivr
-#   is briefly unreachable. There is intentionally NO `api.github.com`
-#   fallback any more.
+#   Use VERSION to install a specific tag. Otherwise, prefer GitHub's no-body
+#   `releases/latest` redirect. This avoids api.github.com quota while keeping
+#   "latest" tied to the same GitHub release source used for the binary
+#   download. jsDelivr is CDN-backed and can lag a freshly published release,
+#   so keep it as fallback only.
 if [ -n "$VERSION" ]; then
   TAG="$VERSION"
 else
-  TAG=$(curl -fsSL "https://data.jsdelivr.com/v1/packages/gh/$REPO/resolved" \
-        | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -n1) || true
-  # jsDelivr returns the version without the leading `v`, but our release
-  # tags are `vX.Y.Z`. Normalise so step (3) below builds the right URL.
-  case "$TAG" in v*) ;; '') ;; *) TAG="v$TAG" ;; esac
+  TAG=$(curl -fsSI -H "Cache-Control: no-cache" -H "Pragma: no-cache" "https://github.com/$REPO/releases/latest" \
+        | sed -n 's|^[Ll][Oo][Cc][Aa][Tt][Ii][Oo][Nn]:[[:space:]]*.*/tag/\(.*\)$|\1|p' \
+        | tr -d '\r' | head -n1) || true
   if [ -z "$TAG" ]; then
-    TAG=$(curl -fsSI "https://github.com/$REPO/releases/latest" \
-          | sed -n 's|^location:.*/tag/\(.*\)$|\1|p' | tr -d '\r' | head -n1) || true
+    TAG=$(curl -fsSL "https://data.jsdelivr.com/v1/packages/gh/$REPO/resolved" \
+          | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -n1) || true
   fi
 fi
 [ -z "$TAG" ] && echo "Could not determine latest release" && exit 1
+case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
 
 # 3) Install binary
 spin() { while true; do for c in '|' '/' '-' '\'; do printf "\r%s %s" "$1" "$c"; sleep 0.1; done; done; }
