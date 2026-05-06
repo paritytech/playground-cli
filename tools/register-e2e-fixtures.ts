@@ -11,6 +11,11 @@
  * alongside the new per-cell deploy domains added in Phase 3 (foundry, cdm,
  * hardhat, multi).
  *
+ * All fixtures are registered with `visibility = 0` (private) so they don't
+ * clutter the public playground.dot grid. The CLI tests that hit these
+ * domains use direct `getMetadataUri` queries (`dot mod <domain>`,
+ * registry-readback assertions), which are unaffected by visibility.
+ *
  * Usage:
  *   bun tools/register-e2e-fixtures.ts                        # register all 5
  *   bun tools/register-e2e-fixtures.ts --domain e2efnd00      # one only
@@ -125,6 +130,7 @@ async function registerOne(fixture: Fixture, signer: Awaited<ReturnType<typeof r
 		domain: fixture.domain,
 		publishSigner: signer,
 		repositoryUrl: fixture.repositoryUrl,
+		isPrivate: true,
 		onLogEvent: (event) => {
 			if (event.kind === "info") console.log(`    • ${event.message}`);
 		},
