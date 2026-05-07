@@ -19,12 +19,23 @@ runs:
           with:
               bun-version: latest
 
+        - name: Restore Kubo from cache
+          uses: actions/cache@v4
+          with:
+              path: ~/.cache/kubo
+              key: kubo-v0.32.1-linux-amd64
+
         - name: Install Kubo (IPFS)
           shell: bash
           run: |
-              curl -fsSL -o kubo_v0.32.1_linux-amd64.tar.gz https://dist.ipfs.tech/kubo/v0.32.1/kubo_v0.32.1_linux-amd64.tar.gz
-              tar xf kubo_v0.32.1_linux-amd64.tar.gz
-              sudo mv kubo/ipfs /usr/local/bin/
+              if [ ! -f ~/.cache/kubo/ipfs ]; then
+                mkdir -p ~/.cache/kubo
+                curl -fsSL -o /tmp/kubo.tar.gz https://dist.ipfs.tech/kubo/v0.32.1/kubo_v0.32.1_linux-amd64.tar.gz
+                tar -xf /tmp/kubo.tar.gz -C /tmp
+                cp /tmp/kubo/ipfs ~/.cache/kubo/ipfs
+                rm -rf /tmp/kubo /tmp/kubo.tar.gz
+              fi
+              sudo cp ~/.cache/kubo/ipfs /usr/local/bin/ipfs
               ipfs init --profile=test
               ipfs version
 
