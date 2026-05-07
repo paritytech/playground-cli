@@ -110,6 +110,22 @@ jobs:
             - id: setup
               uses: ./.github/actions/setup-e2e
 
+            - name: Compute Rust cache key
+              id: rust-key
+              if: matrix.cell == 'pr-deploy-cdm'
+              shell: bash
+              run: echo "key=rust-nightly-x86_64-$(date +%Y-%V)" >> "$GITHUB_OUTPUT"
+
+            - name: Restore Rust toolchain from cache
+              if: matrix.cell == 'pr-deploy-cdm'
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.rustup/toolchains
+                      ~/.cargo/bin
+                  key: ${{ steps.rust-key.outputs.key }}
+                  restore-keys: rust-nightly-x86_64-
+
             - name: Install Rust/CDM toolchain
               if: matrix.cell == 'pr-deploy-cdm'
               shell: bash
@@ -118,9 +134,9 @@ jobs:
                   sudo apt-get install -y -q --no-install-recommends build-essential pkg-config
                   if ! command -v rustup >/dev/null 2>&1; then
                     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-                    echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-                    source "$HOME/.cargo/env"
                   fi
+                  echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+                  source "$HOME/.cargo/env"
                   rustup toolchain install nightly --profile minimal --component rust-src
                   rustup default nightly
                   curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash
