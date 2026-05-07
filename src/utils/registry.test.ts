@@ -66,7 +66,7 @@ describe("getRegistryContract", () => {
         const rawClient = {} as any;
 
         await expect(getRegistryContract(rawClient, fakeSigner)).rejects.toThrow(
-            /BadRegistryLookup/,
+            /MetaRegistryFailure/,
         );
 
         expect(fromClientMock).not.toHaveBeenCalled();

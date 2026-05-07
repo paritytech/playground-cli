@@ -30,7 +30,7 @@ export async function getRegistryContract(
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(
-            `BadRegistryLookup: Could not resolve the live Playground registry contract address from the CDM meta-registry. Refusing to use the cdm.json snapshot because it may be stale. ${msg}`,
+            `MetaRegistryFailure: Could not resolve the live Playground registry contract address from the CDM meta-registry. Refusing to use the cdm.json snapshot because it may be stale. ${msg}`,
             { cause: err instanceof Error ? err : undefined },
         );
     }
