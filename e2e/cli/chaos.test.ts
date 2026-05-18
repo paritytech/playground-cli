@@ -84,7 +84,7 @@ describe("dot deploy — chaos", () => {
 			),
 			{
 				cwd: REPO_ROOT,
-				env: { ...process.env, DOT_TAG: "e2e-chaos-sigint", DOT_TELEMETRY: "1" },
+				env: { ...process.env, DOT_TAG: "e2e-chaos-sigint", DEPLOY_TAG: process.env.DEPLOY_TAG ?? "e2e-cli-chaos-sigint", DOT_TELEMETRY: "1" },
 				reject: false,
 			},
 		);
@@ -169,6 +169,7 @@ describe("dot deploy — chaos RPC failover", () => {
 				env: {
 					...process.env,
 					DOT_TAG: "e2e-chaos-rpc",
+					DEPLOY_TAG: process.env.DEPLOY_TAG ?? "e2e-cli-chaos-rpc",
 					DOT_TELEMETRY: "1",
 					DOT_BULLETIN_RPC: "ws://127.0.0.1:1/",
 				},
