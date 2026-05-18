@@ -93,3 +93,395 @@ These are things that aren't self-evident from reading the code and have bitten 
 - **Bootstrap:** see `docs/e2e-bootstrap.md` for the maintainer-facing setup + recovery procedures. The tool itself is `tools/register-e2e-fixtures.ts`.
 - **Cleanup cron:** `.github/workflows/e2e-cleanup.yml` runs Sunday 04:00 UTC. Stub today; will sweep rotating moddable state when Phase 5e ships.
 - **Design spec:** `docs-internal/2026-05-02-e2e-test-suite-design.md`.
+
+---
+
+# Product context: playground.dot
+
+Source: Playground Full Spec v0.12, May 2026. TL: Ionut. PM: Rebecca. Team: Charles, Utkarsh, Todor, Reinhard, Sveta (Designer), Karim (Dept Head), RevX team (parallel workstream). LGTMs: Karim / Gav / Pierre. Kanban: https://github.com/orgs/paritytech/projects/278. The summary below captures the mechanics that affect frontend / contract / CLI decisions.
+
+## What playground.dot does, end-to-end
+
+playground.dot is a mobile-first quest platform for the Web3 Summit Developer Lab (18–19 June 2026, Berlin). A developer arrives at the venue, scans a QR or visits the URL, picks a tutorial or sample app, mods it with AI assistance, and deploys their own version live on Polkadot Hub — target time-to-deploy is about thirty minutes from a cold start, with no prior Polkadot experience.
+
+The "definition of done" for V1 is exactly that loop: open → tutorial → live deployed app on Polkadot Hub, in about thirty minutes, by a developer who's never touched Polkadot before. The app must be reliable and performant.
+
+**V1 is the only active build target.** V2 and beyond are directional ideas — do not implement unless a specific issue or PR explicitly requests it.
+
+## App structure: three tabs
+
+The playground-app has three tabs (not a single "registry browser"). All three are V1 scope:
+
+| Tab | Purpose |
+|---|---|
+| **Playground** | Quest-forward onboarding. Tutorial hero, sample apps, how it works, ideas to try, leaderboard |
+| **Apps** | Registry browser. All deployed apps, search, category filters, sort options, featured section |
+| **Profile** | Personal hub. Deployed apps, starred apps, rank, storage info, name |
+
+**Tab naming:** the registry tab is **"Apps"** — **not** "dAppStore", "store", or "dApp store". Pinning badge is **"Pinned"** — **not** "Staff pick".
+
+## Key repositories
+
+| Repo | URL | Purpose |
+|---|---|---|
+| Playground app | https://github.com/paritytech/playground-app | Registry browser + Playground tab + Profile |
+| Playground CLI (this repo) | https://github.com/paritytech/playground-cli | DOT CLI |
+| Tutorial (The Stadium / RPS) | https://github.com/paritytech/Rock-Paper-Scissors | Rock Paper Scissors, 4 levels |
+| Empty/starter template | https://github.com/paritytech/playground-app-template | Blank-canvas starter |
+| Product SDK (Parity) | https://github.com/paritytech/product-sdk | Publishes `@parity/product-sdk-*` |
+| triangle-js-sdks (Nova Spektr) | https://github.com/paritytech/triangle-js-sdks | Publishes `@novasamatech/host-api` + `@novasamatech/product-sdk` (TrUAPI low-level transport) — separate from the Parity Product SDK |
+| Attestation Protocol | https://github.com/paritytech/attestation-protocol | Polkadot Attestation Protocol — used for stars/ratings in V2 |
+
+## How the pieces fit together
+
+This CLI is one of several components. The user-visible flow stitches together other components owned by other teams:
+
+| Component | Owned by | Role in the flow |
+|---|---|---|
+| **playground-app** | Frontend / contract team | Three tabs (Playground / Apps / Profile), App Detail Page, publish pipeline |
+| **DOT CLI** (this repo, `dot` binary) | CLI team | Local IDE path: `dot init`, `dot mod`, `dot build`, `dot deploy --playground`, `dot logout`, `dot update` |
+| **RevX** | Leo / RevX team | Browser IDE; opens via deep-link `revx.dev/editor?mod=<domain>` (no quest param — level picker lives inside RevX) |
+| **Tutorial** | Todor | The single structured tutorial (Decentralised Rock, Paper, Scissors, 4 levels, ~30 min) — separate template repo |
+| **Sample apps** (~4 for V1, ≥10 for V2) | Various, TBC | Each is its own repo with `setup.sh`, `.claude/skills/`. The Ballot is the first. **No `quests.json`** — quest ideas live in the README |
+| **`@parity/product-sdk-*` (Product SDK)** | Parity platform team | All chain interactions go through these packages. Parity-maintained, dapp-facing. Depends at runtime on Nova Spektr's `@novasamatech/host-api` + `@novasamatech/product-sdk` (TrUAPI), published from `paritytech/triangle-js-sdks` — separate Nova project, not a rebrand. This CLI is fully on `@parity/product-sdk-*`; `@polkadot-apps/*` is gone (see Non-obvious invariants for guard details) |
+| **Bulletin Chain** | Bulletin / infra | Decentralised storage for app metadata, icons, frontend assets. Mainnet live 7 May 2026 |
+| **DotNS** | DotNS team | `.dot` domain reservation during publish |
+| **Polkadot app + PoP** | Mobile app team / Gav | Sign-in via QR scan; provisions session keys; PoUD/PoP enable PGAS claims |
+
+## Network
+
+**Current network:** Paseo Next v2 (`ACTIVE_TESTNET_ENV = "paseo-next-v2"` in `src/config.ts`). The earlier PreviewNet stop has been completed; the three-stage transition language is retired.
+
+**Summit network:** the event itself runs on a **Summit-specific closed devnet** operated by Parity. All participants get pre-allocated allowances — **no storage or PGAS constraints during the event**. The devnet switches off at the closing ceremony and apps cease to exist. Communicate this clearly in pre-event comms, deploy flow, and on the day. "Save your repo to GitHub" is the consistent message throughout.
+
+**Don't hardcode** "PreviewNet" or "Paseo Next v2" as the permanent network — the Summit devnet is a separate deployment. The chain-config-in-one-file invariant (`src/config.ts::CONFIGS`) keeps the Summit devnet swap to a single switch.
+
+**Storage in production** (outside the Summit devnet): Bulletin storage is time-limited and requires renewal. Frame this as a feature, not a limitation — time-bound deployments encourage active curation, and renewal is how you signal an app is still worth keeping alive.
+
+## PoP auth + session key model
+
+Sign-in is **never** described as "wallet" in the product — it's an **account**. The flow:
+
+1. User taps sign-in → desktop shows a QR; mobile triggers the Polkadot app directly.
+2. Scanning authenticates via PoP (Proof of Personhood) and creates a **session key** locally.
+3. The session key is **pre-loaded** via a single `host_request_resource_allocation([BulletinAllowance, StatementStoreAllowance, SmartContractAllowance])` call: one authorisation dialog, then the session flows without interruption.
+4. From that point until logout, the publish flow + on-chain interactions are signed by the session key. The user is never asked to top up, fund, or manually acquire tokens.
+
+A brief QR scan explanation is shown before sign-in: "You'll need the Polkadot App on your phone — this is how you prove you're a real person."
+
+`dot logout` (CLI) signs out, notifies the mobile app, and cleans up the local session.
+
+The CLI must not present fee-acquisition UX — the session key model means fees are invisible to the user. If you find yourself designing a "buy tokens" or "top up" flow, something has gone wrong upstream.
+
+**Session keys confirmed KEEP for Summit.** Reasons: without them every on-chain action needs phone approval (3–5+ per publish); mobile signing has had reliability issues; batching breaks PGAS; the RevX browser path needs them for signing without constant phone round-trips.
+
+## PGAS and fees
+
+**PGAS (People Gas)** is a burnable sufficient asset on Asset Hub that covers all playground on-chain actions — DotNS registration, registry calls, contract deploys, star/unstar, visibility toggle. Claimed via a ZK ring-VRF proof of personhood — privacy-preserving, sybil-resistant, no prior token ownership required.
+
+**Confirmed values (PR #880, merged 4 May 2026):**
+- Lite PoP / PoUD: 40 claims/day × 0.005 DOT = 0.2 DOT/day
+- Full PoP: 100 claims/day × 0.005 DOT = 0.5 DOT/day
+- PGAS pegged 1:1 to DOT for fee payment
+
+**Budget is sufficient:** ~180–200 transactions across 2 days for an active developer needs ~0.2 DOT — comfortably inside the Lite PoP 2-day budget (0.4 DOT).
+
+**PoUD → PGAS flow:** downloading the Polkadot App automatically grants PoUD → can claim PGAS via the mobile app. `host_request_resource_allocation([SmartContractAllowance])` at session start → phone submits v5 claim → PGAS in product account → all transactions paid automatically.
+
+**Claim path vs spend path:** PGAS claiming is **v5 extrinsic only** — the mobile app handles it, not the CLI/Product SDK. Spending PGAS is v4 and works everywhere. **Batching transactions breaks PGAS fee payment** — the publish flow must remain as sequential individual transactions.
+
+**Summit devnet:** allowances are pre-allocated. PGAS and storage constraints are **not operational concerns during the event**. Vouchers, soft-limit messaging, Bulletin expiry countdown UI, and `dot voucher` are all **removed from V1**. Don't reintroduce.
+
+## The publish flow (5 steps, all paid by the session key)
+
+| # | Step | CLI / UI message |
+|---|---|---|
+| 1 | Upload frontend assets + metadata to Bulletin | "Uploading to Bulletin..." |
+| 2 | Reserve `.dot` domain on Polkadot Hub | "Registering your .dot domain..." |
+| 3 | Register on the playground registry | "Publishing to playground registry..." |
+| 4 | Link app to user account | "Linking to your account..." |
+| 5 | Share — generate a shareable link | "Your app is live!" |
+
+Per-step plain English error messages — never hex revert codes. Retries are safe: Bulletin uploads deduplicate by content, DotNS skips if already owned, registry updates existing entry. Re-deploys show "Updating myapp.dot" not "Publishing myapp.dot".
+
+**Account switch during publish:** if user switches accounts mid-publish, abort with `Account changed mid-publish — please re-run from the new account`.
+
+**Publish validation (V1):** domain uniqueness (enforced at the DotNS contract level — first on-chain transaction wins) and required fields (domain, metadata). **Image format/size limits deferred to V2.**
+
+**Post-deploy CLI output (V1 target):**
+- Live URL (`yourapp.dot.li`) as clickable deep link
+- Playground detail page link (`playground.dot/app/yourapp.dot`)
+- **Primary CTA:** "Share your app — let others mod it" → copies the playground detail page link
+- **Sovereignty line:** "Your app is live on Bulletin Chain, registered on Polkadot Hub, accessible at yourapp.dot.li. Nobody controls this but you."
+- **Name reveal:** "You're live as swift-cosmic-builder. Change your name in playground.dot → My Profile."
+- **Moddable nudge:** "Make your app moddable — connect your GitHub repo so others can build on your work, and so you keep your code after the Summit ends."
+- **Docs link:** "Learn more about building on Polkadot → [docs link]"
+
+**Star prompt after mod deploy moved to Stretch** in v0.12 — was V1, now deferred. Not shown in V1 CLI/RevX.
+
+## Content tiers in the registry
+
+Three tiers all live in the same contract; the frontend differentiates them via pinning + App Detail Page variant.
+
+**Tier 1 — The Stadium tutorial.** One repo (https://github.com/paritytech/Rock-Paper-Scissors), one app entry, pinned.
+
+| Level | Name | Scope | XP | Mobile |
+|---|---|---|---|---|
+| 1 | Local Challenger | Mod UI/theming. No contract changes | 25 | ✅ |
+| 2 | On-Chain Record | Save game results to Bulletin | 25 | Possibly via RevX (no contracts) — pending RevX-mobile confirmation |
+| 3 | The Leaderboard | Deploy leaderboard smart contract | 25 | ❌ laptop required |
+| 4 | Multiplayer | P2P via Statement Store. Challenge via link/QR | 25 | ❌ laptop required |
+
+Total **100 XP** across the four levels.
+
+**Fixes still pending in the RPS repo's `quests.json`:** XP shows 50/100/150/200 = 500 — must be 25/25/25/25 = 100. Tutorial time shown 90m — must be ~30 min. Confirm both with Todor.
+
+**Tier 2 — Sample apps (~4 for V1, ≥10 for V2).** Each is its own repo, pinned. **No `quests.json`** — quest **ideas** live in the README. 10 XP awarded per first deploy per new domain. Re-deploys to the same domain don't re-award.
+
+**Candidate sample apps** (full list — Rebecca actively commissioning; The Ballot is confirmed V1):
+
+| App | Description | Key Polkadot stack | Verticals |
+|---|---|---|---|
+| **The Ballot** *(confirmed V1)* | PoP-gated polling | Smart contracts, PoP | governance / social |
+| Dot.link | Decentralised link-in-bio on .dot | Bulletin, DotNS | personal / identity |
+| Kudos | Permanent signed peer recognition | Smart contracts, PoP, account-to-account | social / professional |
+| Countdown | Unstoppable event countdown tied to block height | Bulletin, DotNS, block timing | personal / creative |
+| Proof Board | Signed permanent statements | Bulletin, Statement Store, PoP | social / censorship-resistance |
+| Shout | Anonymous PoP-verified message board | PoP anonymity, Statement Store | social / identity |
+| Pact | Public on-chain promise between two PoP accounts | Smart contracts | social / games |
+| Signal | Anonymous human-verified survey via ZK PoP | ZK PoP, Statement Store | governance / identity |
+| Squads | On-chain group formation with PoP membership | Smart contracts, PoP, multi-account | social / community |
+| Collab | Shared docs with signed attributed edits | Smart contracts, Bulletin, PoP | productivity / creative |
+| Timelock | Message sealed until future block height | Smart contracts, block timing | games / creative |
+| Chronicle | Personal blog on .dot signed with PoP | Bulletin, DotNS, PoP | personal / creative |
+| Minimarket | Decentralised classifieds on .dot | Bulletin, DotNS, Statement Store | commerce / social |
+| Flipside | Two-sided PoP-gated debate/vote | Smart contracts, PoP voting | governance / community |
+| Reputation | Mutual PoP endorsements (attestation) | Attestation protocol, PoP | professional / identity |
+
+**Recommended V1 priorities (fastest to build):** Dot.link, Kudos, Countdown, Proof Board — alongside The Ballot.
+
+**Sample app spec (V1):**
+- Start from `playground-app-template` — not from scratch. Wait for app#101 (generic Product SDK skills in template) to land before commissioning.
+- Required files: **README** (what it does, what makes it interesting, quest ideas, SDK packages used, key files, "what you just built" explanation), `setup.sh` (idempotent, prints `[setup] doing X...`, fails with actionable errors), `.claude/skills/app-context.md` (~10 lines), generic Product SDK skills via app#101.
+- **No `quests.json` for sample apps.**
+- Must be moddable (public GitHub repo required). Naming convention: `sample-[appname]-app`.
+- **Size limit: one Bulletin chunk (~10MB, TBC with Bulletin team).** Compress images, slim the bundle.
+- Use at least one element of the Polkadot product stack beyond DotNS.
+- Must work on the active V1 network.
+
+**Tier 3 — Participant apps.** Everything modded and deployed by Summit attendees, growing throughout the event. Shown below pinned items.
+
+**Empty/starter template** (https://github.com/paritytech/playground-app-template) is **pinned alongside** the tutorial and sample apps for blank-canvas builds.
+
+## XP and stars
+
+Two separate concepts that are easy to conflate. Points are renamed to **XP** throughout V1 (aligns with Sveta's design).
+
+**XP = leaderboard score (Top Builders).** Stored on-chain as a per-account running balance — consistent across all devices and venue screens in real time. XP only ever goes up.
+
+| Action | XP | Notes |
+|---|---|---|
+| Tutorial level completed | 25 | Max 100 total. Once per `(account, track_id, quest_id)` — prevents farming by redeploying same level to different domains |
+| New app deployed | 10 | First deploy per domain only. Re-deploys to same domain = update, no additional XP |
+| Star received | 10 | Per star awarded to your app |
+| **Someone mods your app** | **25** | **New in v0.12** — strongest signal, effort-based endorsement. Tracked via `mod_count` |
+
+Sample apps award 10 XP per first deploy per domain only — **no quest-based XP**. Quest ideas in the README are inspiration, not a scoring mechanism.
+
+**Stars = what users *award* to other apps.**
+- **Binary vs max-2-stars decision pending this week.** Either way: cumulative total displayed (never as average X.X / 5), **one-way** (for 2-star: can update 1→2 but cannot remove), self-starring forbidden at contract level, **unlimited** (no per-user allocation cap — that "Stars to give: N" pattern is explicitly rejected as engagement-killer).
+- Each star earns the app's owner +10 XP.
+- Stars also serve as personal favourites.
+
+**Leaderboard (now V2 in v0.12 — was V1):** the **Top Builders by XP** leaderboard UI moved from V1 to V2 in the latest spec. The underlying on-chain XP balance is still V1 — venue screens can read it directly. "Most modded" and "most starred" **sort options on the Apps grid also moved to V2**.
+
+**Tutorial completion verification (V1):** XP awarded on deploy automatically. For prize purposes (~$2k prize pool), event admins manually verify top-leaderboard participants completed the tutorial before awarding.
+
+## RevX deep-link contract
+
+`revx.dev/editor?mod=<domain>`
+
+- `mod=<domain>` — required. The .dot domain of the source app to clone.
+- **No `&quest=` param.** Level/quest picker happens **inside RevX**. **Single "Open in RevX" button per app** — applies to tutorial, sample apps, and participant apps alike.
+
+RevX downloads the source as an HTTPS tarball — same as the CLI — so no git or `gh` is required to start. After load: PoP auth (QR on desktop, direct on mobile), AI chat pre-loaded with the template's `CLAUDE.md` + Product SDK skills, and a CLI bridge that maps RevX UI actions to `dot build`, `dot deploy --playground`.
+
+⚠️ **Web container constraint:** the RevX browser web container is Node/TS/JS only — cannot run the IPFS binary. The CLI's current Kubo-binary path (see invariant on `jsMerkle: false`) is the constraint here — until bulletin-deploy's pure-JS merkleizer is fixed, RevX's main storage upload story is blocked.
+
+GitHub login in RevX is currently deactivated pending security review. Without it, apps deployed from RevX are non-moddable by others (the source URL isn't published).
+
+## CLI deep-link contract (`dot mod`)
+
+The CLI's `dot mod` command downloads the source as an **HTTPS tarball** — no git, no `gh`, no clone. Forms:
+
+- Interactive picker: `dot mod` (lists moddable apps only)
+- Direct: `dot mod <domain>`
+
+After download, `setup.sh` runs and its output is kept visible/logged. `dot mod` also writes the source domain to a local metadata file — passed at deploy time so the registry can store "Modded from: [domain]". **Modded-from metadata capture is not yet built** (V1 P0).
+
+Subsequent commands: `dot build` (auto-detects Rust/Solidity/EVM contracts + frontend, picks the package manager, installs if missing), `dot deploy --playground` (full 5-step pipeline, **should default to moddable** — current code defaults non-moddable, needs fixing).
+
+`dot init` covers first-time setup. Dependencies install in parallel: the Rust chain (rustup → Rust nightly → rust-src → cdm) is sequential due to hard dependencies, but IPFS, foundry, and git run concurrently. Estimated saving: ~3 minutes on a fresh machine — not yet built. Then: PoP QR auth, session key creation. **No voucher prompt** — vouchers are removed from V1.
+
+**CLI command naming open question:** `dot x` vs `play-dot x` vs `playdot x` — decision needed before on-site materials are printed.
+
+## Moddable default flow
+
+`dot deploy --playground` **should default to moddable** (current code defaults non-moddable — bug, needs fixing). Full guided flow (spec-level UX intent):
+
+1. CLI checks `gh` auth + existing public repo.
+2. **Repo found** → deploy as moddable automatically.
+3. **No repo** → prompt: "Make your app moddable so others can build on it? (recommended) [Y/n] — requires GitHub".
+4. If Y → "This needs a GitHub repo. Want us to create one for you? (requires gh CLI installed and logged in) [Y/n]". If Y → `gh auth login` if needed → user-initiated repo create → push → deploy as moddable.
+
+**Important CLI invariant** (already enforced — see `src/utils/deploy/moddable.ts`): the CLI **never invokes `gh`**. `resolveRepositoryUrl()` reads existing `origin`, validates it's a public GitHub URL, and records it in metadata. There is no auto-create path; missing `origin` / private repos / non-GitHub URLs all hard-fail with actionable messages. The spec's "guided flow" above describes the intended UX in playground-app — the CLI's contract is stricter and stays user-initiated.
+
+GitHub login is **NOT required** to deploy. Non-moddable apps still get DotNS + Bulletin links — they just can't be cloned by others.
+
+## quests.json shape (tutorial only)
+
+In v0.12 **only the tutorial** ships a `quests.json`. Sample apps no longer have one — quest ideas live in the README.
+
+**Schema:**
+
+```json
+{
+  "schema_version": 1,
+  "track_id": "unique-track-id",
+  "title": "App Name",
+  "description": "Brief description",
+  "total_points": 100,
+  "quests": [
+    {
+      "id": "quest-id",
+      "title": "Quest Title",
+      "difficulty": 1,
+      "estimated_minutes": 15,
+      "branch": "quest/branch-name",
+      "required_tools": ["dot-cli"],
+      "ai_skill_hints": [".claude/skills/skill-file.md"],
+      "points": 25,
+      "teaches": ["concept 1", "concept 2"],
+      "summary": "What the developer will do and mod",
+      "acceptance": ["Specific, testable criterion 1", "..."]
+    }
+  ]
+}
+```
+
+The tutorial repo also ships a `setup.sh` and a `.claude/skills/` directory. **app#101 (In Progress)** copies the generic Product SDK skills into all templates and sample apps automatically.
+
+## Product SDK packages
+
+The product treats this as Polkadot's equivalent of viem + wagmi. All chain interactions go through these. **Two distinct repos to keep straight:**
+- **`paritytech/product-sdk`** (private) publishes `@parity/product-sdk-*` (signer, contracts, bulletin, chain-client, tx, keys, host, storage, statement-store, address, descriptors, terminal, logger, utils, etc.). Parity-maintained, dapp-facing, supersedes `@polkadot-apps/*`. **This CLI is fully migrated** to product-sdk — see the Non-obvious invariants section for the CI guard that prevents `@polkadot-apps/*` re-imports, the caret-range pin model, and load-bearing overrides.
+- **`paritytech/triangle-js-sdks`** (public POC) publishes `@novasamatech/host-api` and `@novasamatech/product-sdk` (TrUAPI low-level transport). **Not** a rebrand of the Parity SDK — a separate Nova-Spektr project.
+
+TrUAPI v0.3 — changes TBC. Watch for breaking changes.
+
+## V1 feature scope (CLI-relevant)
+
+CLI / DevX features that are P0 / P1 for V1:
+
+- `dot init` — first-time setup, QR auth, session key, dependency install
+- `dot init` — parallelised dependency install (IPFS/foundry/git parallel to Rust chain — ~3 min saving). Not yet built.
+- `dot mod` — HTTPS tarball download (no git/gh required), interactive picker, source-domain capture for modded-from metadata
+- `dot build` — auto-detects Rust/Solidity/EVM contracts + frontend
+- `dot deploy --playground` — full 5-step pipeline; **must default to moddable** (bug — current default is non-moddable)
+- `dot logout`
+- `dot update` (works via npm for RevX)
+- Plain English error messages for all common on-chain failures (see UI Copy section in the spec for the full replacement table — covers `--moddable` errors, DotNS validation, mobile signing, funder exhaustion, resource allocation, cdm/forge build failures, etc.)
+- Modded-from metadata capture in CLI (`dot mod` writes source domain) — not yet built, V1 P0
+
+**Removed from V1 (do not reintroduce):**
+- `dot voucher <code>` command
+- Conditional voucher prompt at `dot init`
+- Soft-limit communication
+- Bulletin expiry countdown / two-week expiry narrative
+
+## Go / No-Go criteria (CLI-relevant)
+
+**Hard blockers** (Summit cannot proceed without these):
+1. End-to-end flow: `dot mod` → edit → `dot deploy --playground` → appears in registry (Internal test pass — app#36)
+2. RevX path works end-to-end via the CLI bridge: deep-link → auth → edit → deploy → appears in registry
+3. The Stadium — all 4 levels deployable
+4. Mobile: Level 1 completable end-to-end on phone (Android + iOS)
+5. Security review passed — no critical or high findings outstanding
+6. Internal 30-minute test pass completed (app#36)
+7. Summit devnet confirmed operational and stable
+
+## Directional ideas (V2 / V2.5 / Stretch) — CLI-relevant items
+
+- **V2:** `dot preview` (local preview before deploy — equivalent to `npm run dev`), lazy dependency installation (only install what current level needs), `dot deploy` defaulting to `--playground` (open question), CDM → cargo-pvm migration (Charles owns).
+- **Stretch:** star prompt after mod deploy (moved from V1).
+
+## Out of scope (per spec)
+
+- Building from scratch (entry is always tutorial / sample app / empty starter)
+- Multiple tutorial tracks (The Stadium is the only one)
+- DeFi quests (regulatory)
+- Permanent deletion by owners (visibility toggle only)
+- Account creation outside the Polkadot app / PoP flow
+- Contract-modding on mobile (Level 1 / UI-only quests on phone)
+- Chat Extensions sharing (descoped)
+- **Vouchers / `dot voucher` / soft-limit messaging / Bulletin expiry countdown UI** — all removed in v0.12
+- **Account status component (#67)** — parked, confirmed intentional given the devnet
+- DOT airdrop as a W3S mechanism (stale)
+
+## Vocabulary the product uses
+
+The product is consistent about its language. CLI output, error messages, and command names should follow:
+
+| Concept | Term used | Avoided |
+|---|---|---|
+| Taking on a challenge | accept a quest / join a quest | "try", "attempt", "do" |
+| Modifying an app | mod (verb and noun) | "remix", "fork", "clone" |
+| The modified version | your mod / your app | "your fork", "your remix" |
+| Full deploy + publish | `dot deploy --playground` | "dot ship" |
+| Publishing to the registry | deploy / publish | "submit", "upload", "release" |
+| The structured tutorial | tutorial / The Stadium | "tutorial track", "tutorial quest" |
+| Open-ended modding challenge | quest idea | "hackathon", "challenge" |
+| Working apps with quest ideas | sample apps | "templates", "starter apps" |
+| User identity | account | "wallet" |
+| Deployment network | Polkadot Hub | "mainnet" (sparingly), "Paseo" never in user-facing copy |
+| Host ↔ product transport layer | TrUAPI | "TruAPI", "Host API", "triangle-js-sdk", "host-api" |
+| App others can mod | **moddable** (two d's) | "modable" (one d — wrong) |
+| Leaderboard score | **XP** (renamed from "points") | "points" (legacy term) |
+
+**Plain English error messages:** the spec includes complete replacement tables for **all** current CLI error strings — refer to the UI Copy section in the playground-app CLAUDE.md (or the spec directly) before adding/changing any user-facing CLI error.
+
+## Timeline (for context)
+
+| Phase | Target | Scope |
+|---|---|---|
+| Phase 0 — Foundation | ~~18 Apr 2026~~ (passed) | CLI built. RevX deep-link agreed. Tutorial stubs |
+| Phase 1 — V1 Complete | ~~2 May 2026~~ (in progress) | Core flow. ~4 sample apps. Full publish flow. Internal test pass |
+| Phase 2 — V1 Audit + V2 Build | 3–16 May 2026 | Internal audit on V1 contract. V2 build in parallel |
+| Phase 3 — V2 complete | 17–31 May 2026 | V2 integrated. V2.5 + Stretch only with clear runway |
+| June buffer | 1–17 Jun 2026 | Venue setup, demo station prep, dress rehearsal (~9 Jun) |
+| Event | 18–19 Jun 2026 | Web3 Summit Developer Lab, Berlin |
+
+**Hard constraints:** V1 contract freeze ahead of audit. Everything done **31 May 2026**.
+
+**Testing sessions:**
+- 20 May 2026: Session 02 — Deeper Dive (Playground, getlocal, Wire)
+- 3 June 2026: Session 03 — Final Regression Check
+
+## Open questions worth knowing (parking lot)
+
+- **CLI command naming:** `dot x` vs `play-dot x` vs `playdot x`. Decision needed before Summit.
+- **Star system:** binary vs max 2 stars. Decision expected this week.
+- **`(account, track_id, quest_id)` uniqueness:** confirm `quest_id` is level-scoped (not domain-scoped) to prevent tutorial farming.
+- **TrUAPI v0.3:** what's changing that affects playground?
+- **Session key PGAS sizing:** confirmed to cover full 2-day Summit?
+- **RevX mobile capability:** does RevX support contract-modding on mobile? Determines Level 2 mobile behaviour.
+- **Sample apps V1 list:** The Ballot confirmed. Which 3 others?
+- **V2.5:** Option A (social/follow) or Option B (peer verification)?
+- **GitHub rate limiting at Summit:** 60 unauthenticated requests/IP/hour. Decision: proxy, mandatory `gh auth`, or accept risk? (CLI already lazy-probes once per `dot mod` to conserve quota — see `runModCommand`.)
+- **Session key day 2:** what happens when a developer returns and the session key has expired? Does `dot init` detect and re-initialise?
+- **`dot mod` search/filter:** with 50+ apps at Summit, numbered list becomes unwieldy. In scope for V1?
+- **quests.json points discrepancy:** confirm 25/25/25/25 = 100 XP with Todor, update RPS repo.
+- **Tutorial time:** confirm ~30 min (not 90m in design) with Todor.
+- **Sample app size:** confirm one Bulletin chunk = ~10MB with Bulletin team.
+- **PGAS batch constraint:** which publish flow transactions are affected?
+- **sdk-ink double dry-run calls:** ReviveApi.call + ReviveApi.trace_call doubles rate limit pressure. Monitor and fix before Summit.
