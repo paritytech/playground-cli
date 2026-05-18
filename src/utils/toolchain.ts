@@ -19,6 +19,9 @@ import { resolve } from "node:path";
 import { arch, homedir, platform } from "node:os";
 import { runShell as runPiped } from "./process.js";
 
+/** Returns "sudo " when not already running as root, empty string otherwise. */
+const sudo = () => (typeof process.getuid === "function" && process.getuid() === 0 ? "" : "sudo ");
+
 /** Async exec — resolves with stdout, rejects on non-zero exit. */
 function run(cmd: string, opts?: { shell?: string }): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -142,7 +145,7 @@ export const TOOL_STEPS: ToolStep[] = [
                     const os = platform() === "darwin" ? "darwin" : "linux";
                     const cpu = arch() === "arm64" ? "arm64" : "amd64";
                     await runPiped(
-                        `curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_${os}-${cpu}.tar.gz | tar xz && cd kubo && sudo bash install.sh && cd .. && rm -rf kubo`,
+                        `curl -fsSL https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_${os}-${cpu}.tar.gz | tar xz && cd kubo && ${sudo()}bash install.sh && cd .. && rm -rf kubo`,
                         onData,
                     );
                 }
@@ -154,6 +157,22 @@ export const TOOL_STEPS: ToolStep[] = [
         manualHint: "https://docs.ipfs.tech/install/ then run: ipfs init",
     },
     {
+        name: "git",
+        check: () => commandExists("git"),
+        install: async (onData) => {
+            if (platform() === "darwin" && (await commandExists("brew"))) {
+                await runPiped("brew install git", onData);
+            } else if (platform() === "linux") {
+                await runPiped(`${sudo()}apt update && ${sudo()}apt install -y git`, onData);
+            } else {
+                throw new Error(
+                    "Cannot install git automatically on this platform — install manually.",
+                );
+            }
+        },
+        manualHint: "https://git-scm.com/downloads",
+    },
+    {
         name: "foundry (polkadot)",
         check: () => hasFoundryPolkadot(),
         install: (onData) =>
@@ -163,21 +182,5 @@ export const TOOL_STEPS: ToolStep[] = [
             ),
         manualHint:
             "curl -L https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash && ~/.foundry/bin/foundryup-polkadot",
-    },
-    {
-        name: "git",
-        check: () => commandExists("git"),
-        install: async (onData) => {
-            if (platform() === "darwin" && (await commandExists("brew"))) {
-                await runPiped("brew install git", onData);
-            } else if (platform() === "linux") {
-                await runPiped("sudo apt update && sudo apt install -y git", onData);
-            } else {
-                throw new Error(
-                    "Cannot install git automatically on this platform — install manually.",
-                );
-            }
-        },
-        manualHint: "https://git-scm.com/downloads",
     },
 ];

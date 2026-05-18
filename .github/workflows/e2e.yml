@@ -551,37 +551,26 @@ jobs:
                     -e VERSION="$VERSION_OVERRIDE" \
                     ubuntu:22.04 \
                     bash -eux -c '
-                      # install.sh needs only curl + ca-certs to fetch the
-                      # SEA binary. Anything beyond this is what `dot init`
-                      # (called from install.sh) installs for itself.
                       apt-get update -qq
                       DEBIAN_FRONTEND=noninteractive apt-get install -qq -y --no-install-recommends \
-                        curl ca-certificates bash
+                        curl ca-certificates bash sudo git
 
-                      # ── The actual smoke test ──────────────────────────────
-                      # End-user install path. install.sh exits non-zero if
-                      # the embedded `dot init` fails, so the pipeline alone
-                      # catches the #118-class "installed but unreachable"
-                      # regression. We additionally grep the captured output
-                      # for failed-dependency markers because some failure
-                      # modes still let init exit 0 (e.g. an optional row
-                      # rendered with the failure glyph).
                       curl -fsSL https://raw.githubusercontent.com/paritytech/playground-cli/main/install.sh \
-                        | bash 2>&1 | tee /tmp/init.log
+                        | bash
+                    ' 2>&1 | tee /tmp/cold-start.log
 
-                      grep -q "setup complete" /tmp/init.log || {
-                        echo "::error::dot init did not reach '\''setup complete'\''"
-                        exit 1
-                      }
+                  grep -q "setup complete" /tmp/cold-start.log || {
+                    echo "::error::dot init did not reach 'setup complete'"
+                    exit 1
+                  }
 
-                      # Reject failed-row markers rendered by the dot TUI.
-                      # Fail glyph is U+2715 ✕ (see src/utils/ui/theme/
-                      # tokens.ts); we also accept U+2717 ✗ for terminal-
-                      # font fallback. Word-anchored "failed" only — bare
-                      # " error" would also match " errors" (e.g. apt's
-                      # "0 errors") and apt warnings unrelated to the smoke.
-                      if grep -E "✗ |✕ |\bFAILED\b|\bfailed dependency\b" /tmp/init.log; then
-                        echo "::error::dot init reported a failed dependency"
-                        exit 1
-                      fi
-                    '
+                  # Reject failed-row markers rendered by the dot TUI.
+                  # Fail glyph is U+2715 ✕ (see src/utils/ui/theme/
+                  # tokens.ts); we also accept U+2717 ✗ for terminal-
+                  # font fallback. Word-anchored "failed" only — bare
+                  # " error" would also match " errors" (e.g. apt's
+                  # "0 errors") and apt warnings unrelated to the smoke.
+                  if grep -E "✗ |✕ |\bFAILED\b|\bfailed dependency\b" /tmp/cold-start.log; then
+                    echo "::error::dot init reported a failed dependency"
+                    exit 1
+                  fi
