@@ -34,18 +34,10 @@ import { Command } from "commander";
 import { rmSync } from "node:fs";
 import { runCliCommand } from "../../cli-runtime.js";
 import { errorMessage, withSpan } from "../../telemetry.js";
-import {
-    DEFAULT_ENV,
-    type Env,
-    getChainConfig,
-    resolveLegacyEnv,
-} from "../../config.js";
+import { DEFAULT_ENV, type Env, getChainConfig, resolveLegacyEnv } from "../../config.js";
 import { resolveSigner, type ResolvedSigner } from "../../utils/signer.js";
 import { runStorageDeploy } from "../../utils/deploy/storage.js";
-import {
-    checkDomainAvailability,
-    formatAvailability,
-} from "../../utils/deploy/availability.js";
+import { checkDomainAvailability, formatAvailability } from "../../utils/deploy/availability.js";
 import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { mirrorSite } from "../../utils/decentralize/mirror.js";
 import { findAvailableRandomName } from "../../utils/decentralize/randomName.js";
@@ -73,15 +65,8 @@ export const decentralizeCommand = new Command("decentralize")
         "--dot <name>",
         "DotNS domain (with or without `.dot`). Omit to auto-generate a free random name.",
     )
-    .option(
-        "--env <env>",
-        "Target environment (default: paseo-next-v2)",
-        DEFAULT_ENV,
-    )
-    .option(
-        "--suri <suri>",
-        "Sign with this SURI instead of the default //Bob test account",
-    )
+    .option("--env <env>", "Target environment (default: paseo-next-v2)", DEFAULT_ENV)
+    .option("--suri <suri>", "Sign with this SURI instead of the default //Bob test account")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
@@ -98,15 +83,11 @@ export const decentralizeCommand = new Command("decentralize")
             let mirrorDir: string | null = null;
 
             try {
-                signer = await withSpan(
-                    "cli.decentralize.signer",
-                    "resolve signer",
-                    () => resolveSigner({ suri: opts.suri ?? DEFAULT_SURI }),
+                signer = await withSpan("cli.decentralize.signer", "resolve signer", () =>
+                    resolveSigner({ suri: opts.suri ?? DEFAULT_SURI }),
                 );
 
-                process.stdout.write(
-                    `\n▸ Signing as ${signer.address} (${signer.source})\n`,
-                );
+                process.stdout.write(`\n▸ Signing as ${signer.address} (${signer.source})\n`);
 
                 // ── 1. Pick a domain ────────────────────────────────────────
                 let label: string;
@@ -126,10 +107,7 @@ export const decentralizeCommand = new Command("decentralize")
                                 ownerSs58Address: signer?.address,
                             }),
                     );
-                    if (
-                        availability.status === "reserved" ||
-                        availability.status === "taken"
-                    ) {
+                    if (availability.status === "reserved" || availability.status === "taken") {
                         throw new Error(formatAvailability(availability));
                     }
                     if (availability.status === "unknown") {
@@ -138,9 +116,7 @@ export const decentralizeCommand = new Command("decentralize")
                         );
                     }
                 } else {
-                    process.stdout.write(
-                        `\n▸ Picking a free random .dot name…\n`,
-                    );
+                    process.stdout.write(`\n▸ Picking a free random .dot name…\n`);
                     const chosen = await withSpan(
                         "cli.decentralize.random-name",
                         "find available random name",
@@ -157,25 +133,17 @@ export const decentralizeCommand = new Command("decentralize")
 
                 // ── 2. Mirror the site ──────────────────────────────────────
                 process.stdout.write(`\n▸ Mirroring ${opts.site}…\n`);
-                const mirror = await withSpan(
-                    "cli.decentralize.mirror",
-                    "mirror site",
-                    () =>
-                        mirrorSite({
-                            url: opts.site,
-                            onLine: (line) =>
-                                process.stdout.write(`  ${line}\n`),
-                        }),
+                const mirror = await withSpan("cli.decentralize.mirror", "mirror site", () =>
+                    mirrorSite({
+                        url: opts.site,
+                        onLine: (line) => process.stdout.write(`  ${line}\n`),
+                    }),
                 );
                 mirrorDir = mirror.directory;
-                process.stdout.write(
-                    `  → ${mirror.fileCount} files in ${mirror.directory}\n`,
-                );
+                process.stdout.write(`  → ${mirror.fileCount} files in ${mirror.directory}\n`);
 
                 // ── 3. Upload to Bulletin + register DotNS ──────────────────
-                process.stdout.write(
-                    `\n▸ Uploading to Bulletin and registering ${fullDomain}…\n`,
-                );
+                process.stdout.write(`\n▸ Uploading to Bulletin and registering ${fullDomain}…\n`);
                 const result = await withSpan(
                     "cli.decentralize.storage",
                     "bulletin upload + dotns register",
@@ -188,8 +156,7 @@ export const decentralizeCommand = new Command("decentralize")
                                 signerAddress: signer?.address,
                             },
                             env,
-                            onLogEvent: (event) =>
-                                process.stdout.write(`  • ${event.kind}\n`),
+                            onLogEvent: (event) => process.stdout.write(`  • ${event.kind}\n`),
                         }),
                 );
 
@@ -227,4 +194,3 @@ export const decentralizeCommand = new Command("decentralize")
             }
         }),
     );
-

@@ -14,10 +14,7 @@
 // limitations under the License.
 
 import { randomBytes } from "node:crypto";
-import {
-    checkDomainAvailability,
-    type AvailabilityResult,
-} from "../deploy/availability.js";
+import { checkDomainAvailability, type AvailabilityResult } from "../deploy/availability.js";
 import type { Env } from "../../config.js";
 
 /**
@@ -34,7 +31,7 @@ function randomLabel(): string {
     // Trailing digits keep us inside the "Available to all" classifier branch
     // for short-ish names without needing PoP.
     const suffix = randomBytes(4).toString("hex").slice(0, 6);
-    const digits = String(randomBytes(1)[0] % 90 + 10); // always 2 digits
+    const digits = String((randomBytes(1)[0] % 90) + 10); // always 2 digits
     return `${PREFIX}${suffix}${digits}`;
 }
 
