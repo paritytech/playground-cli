@@ -104,7 +104,7 @@ export const decentralizeCommand = new Command("decentralize")
                         );
                     }
                 } else {
-                    process.stdout.write(`\n▸ Picking a free random .dot name…\n`);
+                    process.stdout.write(`\n▸ Picking a free .dot name from ${opts.site}…\n`);
                     const chosen = await withSpan(
                         "cli.decentralize.random-name",
                         "find available random name",
@@ -112,6 +112,7 @@ export const decentralizeCommand = new Command("decentralize")
                             findAvailableRandomName({
                                 env,
                                 ownerSs58Address: signer?.address,
+                                siteUrl: opts.site,
                             }),
                     );
                     label = chosen.label;

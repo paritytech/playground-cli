@@ -18,34 +18,112 @@ import { checkDomainAvailability, type AvailabilityResult } from "../deploy/avai
 import type { Env } from "../../config.js";
 
 /**
- * Random label prefix for the "free / not-great domain" tier. The base length
- * (8 chars before the trailing digits) keeps us in DotNS's NoStatus bucket
- * (`baseLength >= 9` after 2 trailing digits → no PoP required) so //Bob can
- * self-register without a personhood credential. See `availability.ts`'s
- * `classifyLabel` for the rule.
+ * Label-generation rules (see `availability.ts::classifyLabel`):
+ *
+ *   - `baseLength >= 9` + exactly 2 trailing digits → `POP_STATUS_NO_STATUS`
+ *     (any signer, no personhood credential)
+ *   - More than 2 trailing digits → `POP_STATUS_RESERVED` (unregistrable)
+ *   - Base <= 5 chars → reserved for governance
+ *
+ * We aim for NoStatus so a fresh //Bob demo or any user without PoP can
+ * register the name. The variable middle uses lowercase letters only (no
+ * digits) so the "exactly 2 trailing digits" invariant holds no matter where
+ * the RNG lands — the earlier hex-suffix design could produce >2 trailing
+ * digits ~62 % of the time, silently rejected by the retry loop as RESERVED.
  */
-const PREFIX = "decent-";
 
-function randomLabel(): string {
-    // 6 random base36 chars + 2 trailing digits = "decent-xxxxxx12".
-    // Trailing digits keep us inside the "Available to all" classifier branch
-    // for short-ish names without needing PoP.
-    const suffix = randomBytes(4).toString("hex").slice(0, 6);
-    const digits = String((randomBytes(1)[0] % 90) + 10); // always 2 digits
-    return `${PREFIX}${suffix}${digits}`;
+const MIN_BASE_LEN = 9;
+const MIN_LETTERS = 4;
+const FALLBACK_PREFIX = "decent-";
+/** Cap the derived host segment so the final label stays well under DNS's 63-char ceiling. */
+const MAX_HOST_LEN = 30;
+
+/**
+ * Sanitise a site URL into a domain-safe prefix derived from its hostname.
+ * Returns null if no usable base can be extracted; callers fall back to
+ * `FALLBACK_PREFIX`.
+ *
+ * We deliberately do NOT strip TLDs, public suffixes, or `www.` — they're
+ * part of the URL the user typed and we want the auto-generated name to be a
+ * predictable transliteration of it. Stripping `.com` requires a Public
+ * Suffix List to handle `co.uk`/`github.io`/`vercel.app` correctly, which is
+ * a dep we don't want. Users who want a clean name pass `--dot=<name>`.
+ *
+ *   https://www.shawntabrizi.com/blog  →  www-shawntabrizi-com
+ *   https://example.com:8080            →  example-com
+ *   https://shawntabrizi.github.io      →  shawntabrizi-github-io
+ *   https://example.co.uk               →  example-co-uk
+ *   https://x.com                       →  x-com
+ *   https://garbage://                  →  null
+ */
+function deriveBase(siteUrl: string): string | null {
+    let parsed: URL;
+    try {
+        parsed = new URL(siteUrl);
+    } catch {
+        try {
+            parsed = new URL(`https://${siteUrl}`);
+        } catch {
+            return null;
+        }
+    }
+
+    let s = parsed.hostname
+        .toLowerCase()
+        .replace(/\./g, "-")
+        .replace(/[^a-z0-9-]/g, "");
+    s = s.replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+    if (!s) return null;
+
+    // `normalizeDomain` (playground.ts) requires `^[a-z0-9]` as first char.
+    if (!/^[a-z0-9]/.test(s)) return null;
+
+    if (s.length > MAX_HOST_LEN) s = s.slice(0, MAX_HOST_LEN).replace(/-+$/, "");
+
+    return s || null;
+}
+
+/**
+ * Generate one candidate label. Each call produces fresh randomness, so the
+ * retry loop in `findAvailableRandomName` can resolve collisions.
+ *
+ *   generateLabel("https://shawntabrizi.com")  →  "shawntabrizi-com-abcd42"
+ *   generateLabel("https://x.com")              →  "x-com-abcd42"
+ *   generateLabel(undefined)                    →  "decent-abcd42"
+ */
+export function generateLabel(siteUrl?: string): string {
+    const base = siteUrl ? deriveBase(siteUrl) : null;
+    const prefix = base ? `${base}-` : FALLBACK_PREFIX;
+
+    // Pad with lowercase letters so prefix + letters >= MIN_BASE_LEN.
+    const lettersLen = Math.max(MIN_LETTERS, MIN_BASE_LEN - prefix.length);
+    const letters = Array.from(randomBytes(lettersLen))
+        .map((b) => String.fromCharCode(97 + (b % 26)))
+        .join("");
+
+    const digits = String((randomBytes(1)[0] % 90) + 10); // 10..99
+
+    return `${prefix}${letters}${digits}`;
 }
 
 export interface FindAvailableNameOptions {
     env?: Env;
     ownerSs58Address?: string;
+    /**
+     * URL of the site being decentralized. When provided, the generated
+     * candidates start with a sanitised version of the hostname (e.g.
+     * `shawntabrizi-com-abcd42` rather than `decent-abcd42`). Improves
+     * recognisability of the resulting `.dot.li` URL.
+     */
+    siteUrl?: string;
     /** Cap on attempts; defaults to 20. */
     maxAttempts?: number;
 }
 
 /**
- * Generate `decent-<hash>NN` candidates until one is `available` according to
- * `checkDomainAvailability`. Returns the chosen label and the matching
- * availability result so callers can reuse the embedded `DeployPlan`.
+ * Generate URL-derived NoStatus candidates until one is `available`. Returns
+ * the chosen label and the matching availability result so callers can reuse
+ * the embedded `DeployPlan`.
  *
  * Bails after `maxAttempts` with a descriptive error — collisions in this
  * keyspace would indicate either a broken RNG or an attacker pre-claiming the
@@ -58,7 +136,7 @@ export async function findAvailableRandomName(
     let lastFailure: AvailabilityResult | null = null;
 
     for (let i = 0; i < maxAttempts; i++) {
-        const candidate = randomLabel();
+        const candidate = generateLabel(options.siteUrl);
         const result = await checkDomainAvailability(candidate, {
             env: options.env,
             ownerSs58Address: options.ownerSs58Address,
