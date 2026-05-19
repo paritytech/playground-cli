@@ -173,6 +173,24 @@ export const TOOL_STEPS: ToolStep[] = [
         manualHint: "https://git-scm.com/downloads",
     },
     {
+        // Required by `dot decentralize` (mirrors a live site via `wget --mirror`).
+        // macOS doesn't ship wget by default; Linux distros vary.
+        name: "wget",
+        check: () => commandExists("wget"),
+        install: async (onData) => {
+            if (platform() === "darwin" && (await commandExists("brew"))) {
+                await runPiped("brew install wget", onData);
+            } else if (platform() === "linux") {
+                await runPiped(`${sudo()}apt update && ${sudo()}apt install -y wget`, onData);
+            } else {
+                throw new Error(
+                    "Cannot install wget automatically on this platform — install manually.",
+                );
+            }
+        },
+        manualHint: "brew install wget (macOS) or your distro's package manager",
+    },
+    {
         name: "foundry (polkadot)",
         check: () => hasFoundryPolkadot(),
         install: (onData) =>
