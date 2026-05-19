@@ -18,11 +18,10 @@
  *
  *   dot decentralize --site=shawntabrizi.github.io --dot=shawntabrizi.dot
  *
- * Zero-account by default: we sign with //Bob on paseo-next-v2 so a first-time
- * user can see end-to-end value with no wallet setup. The migration story is
- * surfaced in the success footer — re-deploy from `dot deploy` with their own
- * --suri or QR session and the same domain check at availability.ts:261 will
- * recognise the "owned by you" path and update in place.
+ * Default signer is the `dot init` session signer — the user owns the
+ * registered .dot name. Pass `--suri //Bob` (or any dev name / mnemonic) for
+ * an explicit signer; that's what the demo service at dot-decentralize uses
+ * to give first-time visitors a zero-setup path on paseo-next-v2.
  *
  * Site cloning is `wget --mirror` (see utils/decentralize/mirror.ts). The
  * upload + DotNS register flow re-uses `runStorageDeploy` exactly like
@@ -49,13 +48,6 @@ interface DecentralizeOpts {
     suri?: string;
 }
 
-/**
- * //Bob is a hard-coded dev SURI. It only has funds / authorisation on the
- * paseo-next-v2 testnet — using it on mainnet would silently fail at the
- * funding step. Refusing here gives a friendly error instead.
- */
-const DEFAULT_SURI = "//Bob";
-
 export const decentralizeCommand = new Command("decentralize")
     .description(
         "Mirror a live static site to Polkadot Bulletin and register a .dot name pointing at it",
@@ -66,25 +58,21 @@ export const decentralizeCommand = new Command("decentralize")
         "DotNS domain (with or without `.dot`). Omit to auto-generate a free random name.",
     )
     .option("--env <env>", "Target environment (default: paseo-next-v2)", DEFAULT_ENV)
-    .option("--suri <suri>", "Sign with this SURI instead of the default //Bob test account")
+    .option(
+        "--suri <suri>",
+        "Sign with this SURI (dev name like //Bob, or a BIP-39 mnemonic). " +
+            "Default: the session signer paired by `dot init`.",
+    )
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
-            const usingDefaultBob = !opts.suri;
-
-            if (usingDefaultBob && getChainConfig(env).network !== "testnet") {
-                throw new Error(
-                    `--env ${env} is a non-testnet network; //Bob has no funds there. ` +
-                        `Pass --suri <your-mnemonic-or-key> or use --env paseo-next-v2.`,
-                );
-            }
 
             let signer: ResolvedSigner | null = null;
             let mirrorDir: string | null = null;
 
             try {
                 signer = await withSpan("cli.decentralize.signer", "resolve signer", () =>
-                    resolveSigner({ suri: opts.suri ?? DEFAULT_SURI }),
+                    resolveSigner({ suri: opts.suri }),
                 );
 
                 process.stdout.write(`\n▸ Signing as ${signer.address} (${signer.source})\n`);
@@ -170,11 +158,10 @@ export const decentralizeCommand = new Command("decentralize")
                         `  IPFS CID     ${result.cid}\n` +
                         `  Gateway      ${gatewayUrl}\n`,
                 );
-                if (usingDefaultBob) {
+                if (signer.source === "dev") {
                     process.stdout.write(
-                        "\n  Owned by //Bob (testnet demo). To claim a name under your own\n" +
-                            "  account, run `dot init` to pair a wallet, then re-deploy with\n" +
-                            "  `dot deploy --domain <your-name>.dot` from a project of your own.\n",
+                        "\n  Owned by a development account (testnet demo). To claim a name\n" +
+                            "  under your own account, run `dot init` and re-deploy without --suri.\n",
                     );
                 }
                 process.stdout.write("\n");
