@@ -124,6 +124,15 @@ export const E2E_DOMAINS = {
 	hardhat: "e2ehardhat00",
 	multi: "e2emultip00",
 	/**
+	 * Phase 5e — `nightly-deploy-moddable` cell. Same-owner re-publishes
+	 * across nightlies; each run pre-creates a fresh `paritytech/e2e-cli-
+	 * moddable-<runId>` GH repo and the test points the deploy's `origin`
+	 * at it. The on-chain registry entry's `metadata.repository` changes
+	 * per run; the domain itself is fixed (NoStatus-compatible label so
+	 * the NoStatus deployer can re-publish without PoP).
+	 */
+	moddable: "e2emoddab00",
+	/**
 	 * Used by the nightly-chaos-sigint cell only. The deploy is interrupted by
 	 * SIGINT before it completes, so this domain is never actually registered.
 	 * It is kept separate from `storage` to avoid any race with the happy-path

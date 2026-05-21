@@ -17,21 +17,57 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - name: Sweep rotating moddable repos and domains
+            - name: Sweep rotating moddable repos
               shell: bash
               env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  # Same PAT as the nightly-deploy-moddable cell — it has
+                  # delete_repo scope. Rotate "Playground CLI cold start test"
+                  # before 2026-08-20.
+                  GH_TOKEN: ${{ secrets.E2E_GH_PAT }}
               run: |
-                  echo "::group::What this workflow sweeps"
-                  echo "Per spec §9c, this cron sweeps rotating per-run E2E state:"
-                  echo "  - GH repos matching 'e2e-cli-moddable-*' older than 14 days"
-                  echo "  - Registry domains matching 'e2e-cli-moddable-*' older than 14 days"
-                  echo ""
-                  echo "Phase 5e (moddable) hasn't shipped yet, so there's nothing to sweep today."
-                  echo "When Phase 5e lands, this step gets the actual sweep logic:"
-                  echo "  gh repo list --topic e2e-test-fixture --limit 100 ..."
-                  echo "  bun tools/sweep-moddable-domains.ts (would be added then)"
+                  set -euo pipefail
+
+                  # 7-day retention (spec called for 14; tightening surfaces
+                  # cleanup-cron regressions sooner while Summit is close).
+                  # `date -u -d` only works on GNU coreutils (Linux); we never
+                  # run this on macOS, so no need for portable date arithmetic.
+                  cutoff=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+                  echo "::group::Sweep plan"
+                  echo "Cutoff (delete repos created before this):"
+                  echo "  ${cutoff}"
+                  echo "Filter: paritytech/* repos tagged 'e2e-test-fixture'"
+                  echo "  (set by tests at e2e/cli/helpers/moddable-setup.ts)"
                   echo "::endgroup::"
 
-                  # Stub — exit 0. Replace with real sweep when Phase 5e adds rotating state.
-                  echo "no rotating state to sweep — Phase 5e not yet shipped"
+                  # `gh repo list` paginates implicitly via --limit; 200 is
+                  # generous for the daily-nightly + 7-day cadence (max ~7
+                  # repos in flight before cleanup runs). Bump if we ever
+                  # add more per-run rotating repos.
+                  candidates=$(gh repo list paritytech \
+                    --topic e2e-test-fixture \
+                    --limit 200 \
+                    --json name,createdAt \
+                    --jq ".[] | select(.createdAt < \"${cutoff}\") | .name")
+
+                  if [ -z "${candidates}" ]; then
+                    echo "no repos to sweep"
+                    exit 0
+                  fi
+
+                  echo "::group::Deleting"
+                  while read -r name; do
+                    [ -n "${name}" ] || continue
+                    echo "  paritytech/${name}"
+                    gh repo delete "paritytech/${name}" --yes
+                  done <<< "${candidates}"
+                  echo "::endgroup::"
+
+                  # Known limitation: this sweep only handles GH repos. The
+                  # on-chain registry entry at e2emoddab00.dot accumulates
+                  # cumulative re-publishes (same domain, same owner, so the
+                  # registry-side keeps growing CIDs over time) — that's
+                  # bounded (one fixed domain) and benign. A future
+                  # tools/sweep-moddable-domains.ts could prune historical
+                  # CIDs, but we don't have a public DotNS-side delete API
+                  # today and adding one is out of scope for Phase 5e.

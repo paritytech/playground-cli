@@ -27,6 +27,7 @@
 import { describe, test, expect } from "vitest";
 import { resolve } from "node:path";
 import { dot } from "./helpers/dot.js";
+import { setupModdableFixture } from "./helpers/moddable-setup.js";
 import { SIGNER, BOB, E2E_DOMAINS } from "./fixtures/accounts.js";
 import { fixturePath } from "./fixtures/templates.js";
 import { getApp } from "./fixtures/registry.js";
@@ -250,4 +251,84 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		).not.toBe(0);
 		expect(output.toLowerCase()).toMatch(/revert|taken|registered|owned|unavailable|already/);
 	});
+});
+
+// `dot deploy --moddable` — the tagging half of the moddable round-trip.
+// Pre-creates a public GH repo in test setup, runs `--moddable`, and
+// asserts the deploy succeeds + the registry entry exists. The import
+// half (`dot mod <domain>`) is covered separately in mod.test.ts.
+//
+// Coverage focus: this is the only cell that exercises the
+// `gh repo create → push → dot deploy --moddable` cold-start sequence
+// — the exact path a Summit attendee takes. The deploy reads
+// `git remote get-url origin` from the test's temp working dir, HEADs
+// the GH URL, stamps it into bulletin metadata, and writes the registry
+// entry. Requires `GH_TOKEN` on the runner (see e2e.yml — moddable cell
+// only).
+describe("dot deploy — moddable (requires Paseo + IPFS + GH)", () => {
+	test(
+		"--moddable deploy stamps origin URL into registry metadata",
+		{ timeout: 600_000 },
+		async () => {
+			const runId = process.env.GITHUB_RUN_ID ?? `local-${Date.now()}`;
+			const repoName = `e2e-cli-moddable-${runId}`;
+			const repoUrl = `https://github.com/paritytech/${repoName}`;
+			const domain = E2E_DOMAINS.moddable;
+
+			// Sets up a temp working dir with the frontend-only fixture +
+			// freshly-created paritytech/<repoName> with `origin` pointing
+			// to it. Throws (loudly) on `gh repo create` / push failures so
+			// the cell fails with the actual gh error rather than a
+			// downstream "no origin configured" red herring.
+			const workDir = setupModdableFixture(repoName, frontendOnly);
+
+			const result = await dot(
+				[
+					"deploy",
+					"--signer", "dev",
+					"--domain", domain,
+					"--buildDir", absBuildDir(workDir),
+					"--moddable",
+					"--playground",
+					"--private",
+					"--suri", SIGNER.suri,
+					"--dir", workDir,
+				],
+				{ timeout: 500_000, cwd: workDir },
+			);
+
+			expect(
+				result.exitCode,
+				`moddable deploy failed: ${result.stdout}\n${result.stderr}`,
+			).toBe(0);
+			expect(result.stdout).toContain("Deploy complete");
+			expect(result.stdout).toContain(domain);
+			// The post-deploy summary at src/commands/deploy/summary.ts:76
+			// prints `Moddable: yes — <url>` only when --moddable resolved
+			// successfully. Catches regressions where --moddable is
+			// silently downgraded (e.g. origin read but URL stamping
+			// skipped). The literal `yes — ${url}` reproduces the summary
+			// line shape; loosening to `/yes/` would match the boolean
+			// "yes" in unrelated rows (e.g. private=yes).
+			expect(result.stdout).toContain(`yes — ${repoUrl}`);
+
+			// Belt-and-braces: the registry entry must exist on-chain.
+			// `metadata.repository` lives inside the bulletin-stored JSON
+			// — the `getApp` helper today only returns the CID, not the
+			// JSON contents. The stdout assertion above + the entry
+			// existence here give sufficient coverage; a future
+			// enhancement can fetch the metadata JSON from bulletin and
+			// assert `metadata.repository === repoUrl` directly.
+			const entry = await getApp(`${domain}.dot`);
+			expect(entry, `registry has no entry for ${domain}.dot`).not.toBeNull();
+
+			// Deliberately no test-side `gh repo delete` — the weekly
+			// cleanup cron (e2e-cleanup.yml) sweeps repos older than 7
+			// days by topic filter. A `finally` cleanup here would race
+			// the bulletin upload serialisation: deleting the GH repo
+			// before bulletin commits the metadata could in theory
+			// invalidate the URL the CLI just stamped on-chain. Crashed
+			// runs still get cleaned up by the cron.
+		},
+	);
 });

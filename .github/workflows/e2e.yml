@@ -189,6 +189,12 @@ jobs:
                     - cell: nightly-deploy-multi
                       # source: e2e/cli/deploy.test.ts → describe("dot deploy — multi …")
                       pattern: "deploy — multi"
+                    - cell: nightly-deploy-moddable
+                      # source: e2e/cli/deploy.test.ts → describe("dot deploy — moddable …")
+                      # Needs `gh` (pre-installed on parity-default + ubuntu-latest runners)
+                      # and GH_TOKEN with repo:create on paritytech/ — set below via the
+                      # E2E_GH_PAT secret. Other cells ignore the env var harmlessly.
+                      pattern: "deploy — moddable"
                     - cell: nightly-chaos-rpc
                       # source: e2e/cli/chaos.test.ts → describe("dot deploy — chaos RPC failover")
                       pattern: "chaos RPC failover"
@@ -212,6 +218,13 @@ jobs:
                   DOT_DEPLOY_VERBOSE: "1"
                   DOT_TAG: ${{ steps.setup.outputs.tag }}
                   DOT_TELEMETRY: "1"
+                  # nightly-deploy-moddable creates a fresh public repo in
+                  # paritytech/ each run + pushes the fixture into it. Other
+                  # cells in this matrix don't consume GH_TOKEN so setting it
+                  # here is harmless. Rotate the underlying PAT (labelled
+                  # "Playground CLI cold start test" on Rebecca's account)
+                  # before 2026-08-20 — 90-day expiry from 2026-05-21.
+                  GH_TOKEN: ${{ secrets.E2E_GH_PAT }}
 
             - name: Surface failure detail
               if: failure()
