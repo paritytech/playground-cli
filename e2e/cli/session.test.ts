@@ -24,6 +24,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createTestSession } from "@parity/product-sdk-terminal/testing";
 import { dot } from "./helpers/dot.js";
 import { fixturePath } from "./fixtures/templates.js";
 
@@ -102,5 +103,34 @@ describe("session management", () => {
 		// Exact wording from src/commands/logout/index.ts:
 		//   console.log("  No account is signed in.\n");
 		expect(result.stdout).toContain("No account is signed in");
+	});
+
+	test("logout clears local session files left by a previous login", async () => {
+		// Synthesize a session on disk as if QR pairing had completed.
+		// `createTestSession` is a "dev utility, not a stable contract" per the
+		// SDK — it hand-rolls the on-disk SCALE codec — so a minor bump of
+		// `@parity/product-sdk-terminal` could break this test if the format
+		// drifts. The SDK's own `testing.interop.test.ts` round-trip catches
+		// that upstream first.
+		const storageDir = join(tempHome, ".polkadot-apps");
+		await createTestSession({ appId: "dot-cli", storageDir });
+		const before = getSessionFiles(storageDir);
+		expect(before.length, "createTestSession should write at least one dot-cli_* file").toBeGreaterThan(0);
+
+		// `adapter.sessions.disconnect()` will reject — the synthesized local
+		// account was never registered on the People chain so the statement
+		// store write fails with NoAllowanceError. `waitForLogout` catches
+		// that and falls back to `clearLocalAppStorage`, which is the path
+		// we want to validate: the user is unblocked even when the phone /
+		// statement store is unreachable. Status comes back `partial` rather
+		// than `success`, but the CLI still exits 0.
+		const result = await dot(["logout"], { home: tempHome, timeout: 90_000 });
+		expect(
+			result.exitCode,
+			`logout exited non-zero: ${result.stdout}\n${result.stderr}`,
+		).toBe(0);
+
+		const after = getSessionFiles(storageDir);
+		expect(after, "logout should remove all dot-cli_* files").toEqual([]);
 	});
 });
