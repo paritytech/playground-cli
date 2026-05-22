@@ -240,6 +240,20 @@ jobs:
                   retention-days: 7
                   if-no-files-found: ignore
 
+            - name: Clean up moddable test fixture repo
+              # Only the moddable cell creates a per-run GH repo; other cells in
+              # this matrix would no-op (the delete would 404). Run on success,
+              # failure, AND cancellation so we never leak a public repo. The
+              # weekly cleanup cron at e2e-cleanup.yml is the backstop, but
+              # deleting here means retries within the same run start clean
+              # and we don't accumulate one orphan per failed nightly.
+              if: always() && matrix.cell == 'nightly-deploy-moddable'
+              continue-on-error: true
+              env:
+                  GH_TOKEN: ${{ secrets.E2E_GH_PAT }}
+              run: |
+                  gh repo delete "paritytech/e2e-cli-moddable-${{ github.run_id }}" --yes 2>/dev/null || true
+
     test-nightly-no-publish:
         name: "E2E · ${{ matrix.cell }}"
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

@@ -77,13 +77,19 @@ async function connectPaseo(): Promise<PaseoClient> {
 }
 
 function timeoutAfter(ms: number): Promise<never> {
-    return new Promise((_, reject) =>
-        setTimeout(
+    return new Promise((_, reject) => {
+        // .unref() so the timer doesn't keep the event loop alive after Promise.race
+        // resolves with the connection winner. Without it, every short-lived process
+        // that touches getConnection() stays open for `ms` after work completes —
+        // the CLI's scheduleHardExit() papers over it in production, but the e2e
+        // test harness has no such guard and was hanging ~30 s past junit write.
+        const t = setTimeout(
             () =>
                 reject(new Error(`Timed out connecting to Paseo after ${Math.round(ms / 1000)}s`)),
             ms,
-        ),
-    );
+        );
+        t.unref();
+    });
 }
 
 export function getConnection(): Promise<PaseoClient> {

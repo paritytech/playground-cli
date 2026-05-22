@@ -22,32 +22,29 @@
 
 import { destroyConnection, getConnection, type PaseoClient } from "../../../src/utils/connection.js";
 
-const CONNECT_TIMEOUT_MS = 30_000;
-
 let clientPromise: Promise<PaseoClient> | null = null;
 let client: PaseoClient | null = null;
 
 /**
  * Get a cached Paseo client. Creates one on first call.
  * Reuses the same connection for all subsequent calls.
+ *
+ * Delegates connect-timeout handling to `getConnection()` — wrapping a second
+ * Promise.race-with-setTimeout here previously stacked an extra un-unref'd
+ * timer on top, leaking the event loop for ~30 s after every short test and
+ * causing vitest teardown to hang past its 5 s budget.
  */
 export async function getTestClient(): Promise<PaseoClient> {
 	if (!clientPromise) {
-		clientPromise = Promise.race([
-			getConnection().then((c) => {
+		clientPromise = getConnection()
+			.then((c) => {
 				client = c;
 				return c;
-			}),
-			new Promise<never>((_, reject) =>
-				setTimeout(
-					() => reject(new Error(`Timed out connecting to Paseo after ${CONNECT_TIMEOUT_MS / 1000}s`)),
-					CONNECT_TIMEOUT_MS,
-				),
-			),
-		]).catch((err) => {
-			clientPromise = null;
-			throw err;
-		});
+			})
+			.catch((err) => {
+				clientPromise = null;
+				throw err;
+			});
 	}
 	return clientPromise;
 }

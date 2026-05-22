@@ -22,10 +22,14 @@
  * subsequent `dot deploy --moddable` call has a `origin` URL that
  * `assertPublicGitHubRepo()` will accept.
  *
- * Failures bubble up cleanly so the CI cell fails loudly with the `gh`
- * error message — per the locked design decision (no retries, no
- * auto-renaming). The weekly cleanup cron sweeps repos by topic, so
- * test crashes still get tidied up later.
+ * Idempotent on the GH repo: if `paritytech/<repoName>` already exists
+ * (e.g. from a previous retry attempt within the same workflow run, or a
+ * leftover from a crashed prior run), the helper reuses it instead of
+ * crashing on "Name already exists". This mirrors the real-user re-run
+ * path the CLI itself handles via "using existing origin" — and lets
+ * `nick-fields/retry` actually retry without colliding on the run-scoped
+ * repo name. The weekly cleanup cron sweeps repos by topic, so test
+ * crashes still get tidied up later.
  */
 
 import { execFileSync } from "node:child_process";
@@ -42,6 +46,21 @@ function sh(cmd: string, args: string[], cwd?: string): string {
 		stdio: ["pipe", "pipe", "pipe"],
 		cwd,
 	}).trim();
+}
+
+// `sh` throws on non-zero exit (execFileSync default). For the
+// existence probe we want exit code, not throw — `gh repo view` exits 1
+// when the repo doesn't exist, which is a normal branch here, not a
+// failure.
+function ghRepoExists(qualifiedName: string): boolean {
+	try {
+		execFileSync("gh", ["repo", "view", qualifiedName, "--json", "url"], {
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -81,33 +100,49 @@ export function setupModdableFixture(
 		workDir,
 	);
 
-	// `gh repo create --source --push` does the origin-add + initial push in
-	// one round-trip, which is the same flow a Summit user would use
-	// (`gh repo create <name> --public --source . --push`). Description
-	// makes the auto-cleanup origin obvious to anyone who stumbles on the
-	// repo before the cron sweeps it.
-	sh("gh", [
-		"repo",
-		"create",
-		`${ORG}/${repoName}`,
-		"--public",
-		"--description",
-		"playground-cli E2E moddable test fixture (auto-cleaned)",
-		"--source",
-		workDir,
-		"--push",
-	]);
+	const qualifiedName = `${ORG}/${repoName}`;
+	if (ghRepoExists(qualifiedName)) {
+		// Reuse path — repo already exists (retry attempt within the same
+		// workflow run, or leftover from a crashed earlier run). Add origin
+		// manually and force-push: fixture content is identical between
+		// attempts, so the prior commit SHA is irrelevant. This matches
+		// what the CLI itself does on re-run ("using existing origin (...)").
+		//
+		// `gh auth setup-git` wires gh's credential helper into git globally
+		// so the subsequent raw `git push` can authenticate to github.com
+		// via GH_TOKEN. `gh repo create --push` does this implicitly; we
+		// have to do it explicitly when bypassing gh repo create.
+		// `setup-git` is idempotent.
+		sh("gh", ["auth", "setup-git"]);
+		sh("git", ["remote", "add", "origin", `https://github.com/${qualifiedName}.git`], workDir);
+		sh("git", ["push", "-u", "origin", "main", "--force"], workDir);
+	} else {
+		// Cold path — fresh `gh repo create --source --push` does origin-add
+		// + initial push in one round-trip, matching the Summit-user flow.
+		sh("gh", [
+			"repo",
+			"create",
+			qualifiedName,
+			"--public",
+			"--description",
+			"playground-cli E2E moddable test fixture (auto-cleaned)",
+			"--source",
+			workDir,
+			"--push",
+		]);
+	}
 
-	// Topic-tag separately. `gh repo create` doesn't accept a `--topic`
-	// flag today, and the cleanup cron filters by `--topic e2e-test-fixture`
-	// — so without this edit, the repo would never get swept and would
-	// accumulate indefinitely. Belt-and-braces: if `gh repo edit` fails
-	// (rate limit, transient), the cleanup falls back to name-prefix
-	// matching is NOT implemented today, so this throw is load-bearing.
+	// Topic-tag (idempotent — `--add-topic` is a no-op if already tagged).
+	// `gh repo create` doesn't accept a `--topic` flag today, and the
+	// cleanup cron filters by `--topic e2e-test-fixture` — so without this
+	// edit, the repo would never get swept and would accumulate indefinitely.
+	// Belt-and-braces: if `gh repo edit` fails (rate limit, transient), the
+	// cleanup fallback to name-prefix matching is NOT implemented today, so
+	// this throw is load-bearing.
 	sh("gh", [
 		"repo",
 		"edit",
-		`${ORG}/${repoName}`,
+		qualifiedName,
 		"--add-topic",
 		TOPIC,
 	]);
