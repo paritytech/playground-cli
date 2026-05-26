@@ -117,13 +117,16 @@ describe("session management", () => {
 		const before = getSessionFiles(storageDir);
 		expect(before.length, "createTestSession should write at least one dot-cli_* file").toBeGreaterThan(0);
 
-		// `adapter.sessions.disconnect()` will reject — the synthesized local
-		// account was never registered on the People chain so the statement
-		// store write fails with NoAllowanceError. `waitForLogout` catches
-		// that and falls back to `clearLocalAppStorage`, which is the path
-		// we want to validate: the user is unblocked even when the phone /
-		// statement store is unreachable. Status comes back `partial` rather
-		// than `success`, but the CLI still exits 0.
+		// `waitForLogout` runs `clearLocalAppStorage()` on both the success and
+		// failure paths of `adapter.sessions.disconnect()` — so this test
+		// passes regardless of whether the disconnect statement actually
+		// round-trips on the testnet. The synthesized session has no real
+		// mobile peer, so the disconnect call's behaviour is implementation
+		// defined (statement-store may accept it as a fire-and-forget,
+		// or reject if Bulletin allowance is missing). What we're locking
+		// in here is the local-cleanup invariant: after a clean logout no
+		// `${DAPP_ID}_*` files remain in `~/.polkadot-apps/`, regardless of
+		// whether the user's phone is reachable.
 		const result = await dot(["logout"], { home: tempHome, timeout: 90_000 });
 		expect(
 			result.exitCode,

@@ -220,6 +220,41 @@ describe("waitForLogout", () => {
         expect(adapter.destroyCalls).toBe(1);
     });
 
+    it("clears local DAPP_ID files on the happy path too, not just the failure path", async () => {
+        // Regression catcher: the SDK's `disconnect()` filters the session
+        // out of its in-memory list and writes the (now-empty) list back to
+        // `${DAPP_ID}_SsoSessions.json` — but doesn't unlink the file. Before
+        // this fix, the happy path returned `success` with the empty file
+        // still on disk, so `~/.polkadot-apps/` accumulated leftovers across
+        // login → logout cycles. We now run clearLocalAppStorage() on success
+        // too, so the file is gone after a clean logout.
+        const staleDir = join(appsDir, ".polkadot-apps");
+        const { mkdirSync } = await import("node:fs");
+        mkdirSync(staleDir, { recursive: true });
+        const sessionsFile = join(staleDir, `${DAPP_ID}_SsoSessions.json`);
+        const secretsFile = join(staleDir, `${DAPP_ID}_UserSecrets_abc.json`);
+        const foreignFile = join(staleDir, "other-app_SsoSessions.json");
+        writeFileSync(sessionsFile, "[]");
+        writeFileSync(secretsFile, "{}");
+        writeFileSync(foreignFile, "leave-me-alone");
+
+        const adapter = fakeAdapter(() => Promise.resolve(okResult(undefined)));
+        const handle = {
+            adapter,
+            address: "5Gxyz",
+            session: fakeSession(),
+        } as unknown as LogoutHandle;
+        const events: LogoutStatus[] = [];
+
+        await waitForLogout(handle, (s) => events.push(s));
+
+        expect(events.at(-1)).toEqual({ step: "success", address: "5Gxyz" });
+        expect(existsSync(sessionsFile)).toBe(false);
+        expect(existsSync(secretsFile)).toBe(false);
+        // Foreign app's files MUST remain untouched.
+        expect(existsSync(foreignFile)).toBe(true);
+    });
+
     it("falls back to local clear and emits partial when disconnect returns err", async () => {
         // Seed a stale session file so we can verify the fallback actually deletes it.
         const staleDir = join(appsDir, ".polkadot-apps");

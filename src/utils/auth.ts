@@ -418,14 +418,17 @@ export async function findSession(): Promise<LogoutHandle | null> {
  * Disconnect the given session. Reports progress via callback.
  *
  * Happy path: `adapter.sessions.disconnect()` sends a `Disconnected` statement
- * so the paired mobile app drops its side of the connection, then clears the
- * local session + user-secret files.
+ * so the paired mobile app drops its side of the connection, then we run
+ * `clearLocalAppStorage()` to unlink the `${DAPP_ID}_*` files. The SDK's
+ * `disconnect()` itself only filters the session out of the in-memory list
+ * and writes the (possibly-empty) list back to disk — without the explicit
+ * cleanup the SsoSessions file would linger as `[]`.
  *
  * If the remote notification fails (statement store unreachable, WebSocket
- * torn down, …) we fall back to deleting the `${DAPP_ID}_*` files in
- * `~/.polkadot-apps/` directly — strictly narrower than `rm -rf ~/.polkadot-apps`
- * and keeps the user unblocked. The mobile app will show a stale pairing
- * until it reconnects, which we surface via `partial`.
+ * torn down, …) we still run `clearLocalAppStorage()` — strictly narrower
+ * than `rm -rf ~/.polkadot-apps` and keeps the user unblocked. The mobile
+ * app will show a stale pairing until it reconnects, which we surface via
+ * `partial`.
  *
  * Always releases the adapter before returning.
  */
@@ -442,6 +445,14 @@ export async function waitForLogout(
         onStatus({ step: "disconnecting", address });
         const result = await adapter.sessions.disconnect(session);
         if (result.isOk()) {
+            // Run the local cleanup pass on success too. The SDK's
+            // `disconnect()` filters the session out of `ssoSessionRepository`
+            // and writes the (now-empty) list back to disk, but it doesn't
+            // unlink the file — so `${DAPP_ID}_SsoSessions.json` lingers as
+            // `[]` on the filesystem. `clearLocalAppStorage()` removes it
+            // outright so `~/.polkadot-apps/` ends up tidy regardless of
+            // whether the mobile notification round-tripped.
+            await clearLocalAppStorage();
             onStatus({ step: "success", address });
             return;
         }
