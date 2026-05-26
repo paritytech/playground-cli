@@ -18,8 +18,8 @@
  *
  * We upload the metadata JSON through Bulletin `TransactionStorage.store`
  * with the product-scoped RFC-0010 Bulletin allowance account, then call
- * `registry.publish(domain, metadataCid, visibility, owner)` ourselves via
- * `getRegistryContract()`.
+ * `registry.publish(domain, metadataCid, visibility, owner, modded_from,
+ * is_moddable, is_dev_signer)` ourselves via `getRegistryContract()`.
  * Publishing is always signed by the user's product account so the contract's
  * `env::caller()` matches their address — that's what drives the playground-app
  * "myApps" view.
@@ -290,6 +290,21 @@ export async function publishToPlayground(
                       value: "0x0000000000000000000000000000000000000000" as const,
                   };
 
+            // v11 of `@w3s/playground-registry` extended `publish()` with three
+            // tail params used by the new points / leaderboard / mod-credit
+            // surface. `modded_from` carries the source domain when this app was
+            // created via `dot mod <domain>` — capture-at-mod-time is not yet
+            // wired up in the CLI (spec V1 P0), so we pass `""` (the contract's
+            // sentinel for "no source"). `is_moddable` is the same signal the
+            // app metadata already carries — true when a public GitHub
+            // `repositoryUrl` is recorded. `is_dev_signer` lets the contract
+            // award launch points only when a real user account signs the
+            // publish, not when Alice / `--suri` does on the user's behalf in
+            // dev mode.
+            const moddedFrom = "";
+            const isModdable = options.repositoryUrl !== null;
+            const isDevSigner = options.publishSigner.source === "dev";
+
             let lastError: unknown;
             for (let attempt = 1; attempt <= MAX_REGISTRY_RETRIES; attempt++) {
                 try {
@@ -299,6 +314,9 @@ export async function publishToPlayground(
                         metadataCid,
                         visibility,
                         owner,
+                        moddedFrom,
+                        isModdable,
+                        isDevSigner,
                     );
                     if (result && result.ok === false) {
                         throw new Error("Registry publish transaction reverted");

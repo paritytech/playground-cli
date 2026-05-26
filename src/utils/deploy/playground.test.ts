@@ -326,10 +326,15 @@ describe("publishToPlayground", () => {
                 expect.objectContaining({ __kind: "store" }),
                 bulletinStorageSigner,
             );
-            expect(publishTx).toHaveBeenCalledWith("my-app.dot", "bafymeta", 1, {
-                isSome: false,
-                value: "0x0000000000000000000000000000000000000000",
-            });
+            expect(publishTx).toHaveBeenCalledWith(
+                "my-app.dot",
+                "bafymeta",
+                1,
+                { isSome: false, value: "0x0000000000000000000000000000000000000000" },
+                "", // modded_from: capture-at-mod-time not yet wired (V1 P0)
+                true, // is_moddable: repositoryUrl is set
+                false, // is_dev_signer: fakeSigner.source === "session"
+            );
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -388,10 +393,15 @@ describe("publishToPlayground", () => {
             cwd: "/definitely/not/a/repo",
             claimedOwnerH160: "0x1234567890abcdef1234567890abcdef12345678",
         });
-        expect(publishTx).toHaveBeenCalledWith("claimed-app.dot", "bafymeta", 1, {
-            isSome: true,
-            value: "0x1234567890abcdef1234567890abcdef12345678",
-        });
+        expect(publishTx).toHaveBeenCalledWith(
+            "claimed-app.dot",
+            "bafymeta",
+            1,
+            { isSome: true, value: "0x1234567890abcdef1234567890abcdef12345678" },
+            "",
+            false, // is_moddable: repositoryUrl was null
+            false,
+        );
     });
 
     it("passes visibility=0 when isPrivate is true", async () => {
@@ -402,10 +412,39 @@ describe("publishToPlayground", () => {
             cwd: "/definitely/not/a/repo",
             isPrivate: true,
         });
-        expect(publishTx).toHaveBeenCalledWith("secret.dot", "bafymeta", 0, {
-            isSome: false,
-            value: "0x0000000000000000000000000000000000000000",
+        expect(publishTx).toHaveBeenCalledWith(
+            "secret.dot",
+            "bafymeta",
+            0,
+            { isSome: false, value: "0x0000000000000000000000000000000000000000" },
+            "",
+            true,
+            false,
+        );
+    });
+
+    it("passes is_dev_signer=true and the right is_moddable when the signer source is dev", async () => {
+        // Catches regressions where the dev-mode publish path stops flagging
+        // itself as dev — the contract uses `is_dev_signer` to skip the
+        // launch-points award for the deployer (Alice / `--suri` etc.).
+        // Pairing is_moddable=false here exercises both new params in a
+        // single call, rather than only the default `true` case from above.
+        const devSigner: ResolvedSigner = { ...fakeSigner, source: "dev" };
+        await publishToPlayground({
+            domain: "dev-deploy.dot",
+            publishSigner: devSigner,
+            repositoryUrl: null,
+            cwd: "/definitely/not/a/repo",
         });
+        expect(publishTx).toHaveBeenCalledWith(
+            "dev-deploy.dot",
+            "bafymeta",
+            1,
+            { isSome: false, value: "0x0000000000000000000000000000000000000000" },
+            "",
+            false,
+            true,
+        );
     });
 
     it("retries up to 3 times on registry publish failure", async () => {
