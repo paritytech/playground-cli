@@ -112,7 +112,7 @@ These aren't self-evident from reading the code and have bitten us before. Treat
 
 # Product context: playground.dot
 
-Source: Playground Full Spec v0.12, May 2026. Team: Ionut (TL), Rebecca (PM), Charles, Utkarsh, Todor, Reinhard, Sveta (Design), Karim (Dept), RevX team (parallel). Kanban: https://github.com/orgs/paritytech/projects/278.
+Source: Playground Full Spec v0.18, May 2026. Team: Ionut (TL), Rebecca (PM), Charles, Utkarsh, Todor, Reinhard, Sveta (Design), Karim (Dept), RevX team (parallel). Kanban: https://github.com/orgs/paritytech/projects/278.
 
 ## What it is
 
@@ -138,7 +138,7 @@ Three tabs in the playground-app (not a single "registry browser"). All three ar
 |---|---|
 | `paritytech/playground-app` | Registry + Playground tab + Profile |
 | `paritytech/playground-cli` (this repo) | `dot` CLI |
-| `paritytech/Rock-Paper-Scissors` | The Stadium tutorial (4 levels) |
+| `paritytech/Rock-Paper-Scissors` | Rock Paper Scissors tutorial (4 levels) |
 | `paritytech/playground-app-template` | Blank-canvas starter |
 | `paritytech/product-sdk` | Publishes `@parity/product-sdk-*` |
 | `paritytech/triangle-js-sdks` | Publishes `@novasamatech/host-api` + `@novasamatech/product-sdk` (TrUAPI) — separate from the Parity SDK |
@@ -150,9 +150,9 @@ Three tabs in the playground-app (not a single "registry browser"). All three ar
 |---|---|---|
 | **playground-app** | Frontend/contract team | Three tabs, App Detail Page, publish pipeline |
 | **`dot` CLI** (this repo) | CLI team | Local IDE path: `dot init`, `dot mod`, `dot build`, `dot deploy --playground`, `dot logout`, `dot update` |
-| **RevX** | Leo / RevX | Browser IDE; opens via `revx.dev/editor?mod=<domain>` (no quest param) |
-| **Tutorial** | Todor | The Stadium (RPS, 4 levels, ~30 min) |
-| **Sample apps** (~4 for V1, ≥10 for V2) | Various | Each is its own repo with `setup.sh` + `.claude/skills/`. Quest ideas live in the README — no `quests.json`. The Ballot is the first confirmed sample. |
+| **RevX** | Talles / RevX | Browser IDE; opens via `revx.dev/editor?mod=<domain>&quest=<level>` (`quest=` for tutorial only) |
+| **Tutorial** | Todor | Rock Paper Scissors (4 levels, ~30 min) |
+| **Sample apps** (~4 for V1, ≥10 for V2) | Various | Each is its own repo with `setup.sh` + `.claude/skills/`. Quest ideas live in the README — no `quests.json`. Feedback Board (Todor) is built; The Ballot, Kudos, Countdown, Pact are candidates. |
 | **`@parity/product-sdk-*`** | Parity platform | All chain interactions. Depends on Nova Spektr's `@novasamatech/host-api` + `@novasamatech/product-sdk` (TrUAPI). |
 | **Bulletin Chain** | Bulletin/infra | Decentralised storage for app metadata, icons, assets. Mainnet live 7 May 2026. |
 | **DotNS** | DotNS team | `.dot` domain reservation during publish. |
@@ -205,24 +205,24 @@ Plain-English error messages — never hex revert codes. Retries are safe: Bulle
 
 **Publish validation (V1):** domain uniqueness (DotNS contract, first on-chain tx wins) and required fields. Image format/size limits deferred to V2.
 
-**Post-deploy CLI output target:** live URL (`yourapp.dot.li`) + playground detail link + share CTA ("Share your app — let others mod it") + sovereignty line ("Your app is live on Bulletin Chain, registered on Polkadot Hub, accessible at yourapp.dot.li. Nobody controls this but you.") + name reveal ("You're live as swift-cosmic-builder. Change your name in playground.dot → My Profile.") + moddable nudge + docs link.
+**Post-deploy CLI output target:** live URL (`yourapp.dot.li`) + playground detail link + share CTA ("Share your app — let others mod it") + sovereignty line ("Your app is live on Bulletin Chain, registered on Polkadot Hub, accessible at yourapp.dot.li. Nobody controls this but you.") + name reveal ("You're live as [current display name]. To set a different username for playground.dot, go to My Profile in playground.dot.") + moddable nudge + docs link.
 
 ## Content tiers
 
 Three tiers share the same contract; the frontend differentiates via pinning + App Detail Page variant.
 
-**Tier 1 — The Stadium tutorial.** Single repo (`paritytech/Rock-Paper-Scissors`), one app entry, pinned.
+**Tier 1 — Rock Paper Scissors tutorial.** Single repo (`paritytech/Rock-Paper-Scissors`), one app entry, pinned. Decentralised Rock Paper Scissors built by Todor. ~30 min total across all levels.
 
-| Level | Name | Scope | XP | Mobile |
-|---|---|---|---|---|
-| 1 | Local Challenger | Mod UI/theming. No contract changes | 25 | ✅ |
-| 2 | On-Chain Record | Save game results to Bulletin | 25 | Maybe via RevX (pending) |
-| 3 | The Leaderboard | Deploy leaderboard smart contract | 25 | ❌ laptop required |
-| 4 | Multiplayer | P2P via Statement Store | 25 | ❌ laptop required |
+| Level | Name | Scope | Mobile |
+|---|---|---|---|
+| 1 | Local Challenger | Mod UI/theming. No contract changes | ✅ Fully supported |
+| 2 | On-Chain Record | Save game results to Bulletin | ✅ RevX (no contracts — frontend only) |
+| 3 | The Leaderboard | Deploy leaderboard smart contract | ❌ CLI + laptop only (RevX dropped Solidity/Rust support) |
+| 4 | Multiplayer | P2P via Statement Store. Challenge via link/QR | ❌ CLI + laptop only |
 
-Total **100 XP**. Outstanding RPS-repo fix: `quests.json` shows 50/100/150/200 = 500 XP; must be 25/25/25/25. Confirm with Todor.
+**XP:** 100 XP **flat** on tutorial deploy — one award for completing the tutorial track, not per level. Requires the tutorial flag (CR6 — see XP section). IslandPortal popup currently shows 400 XP / 90 min — should be 100 XP / ~30 min. Align with Todor.
 
-**Tier 2 — Sample apps** (~4 V1, ≥10 V2). Each is its own repo, pinned. **No `quests.json`** — quest ideas live in the README. 10 XP per first deploy per new domain. Confirmed V1: **The Ballot** (PoP-gated polling). Recommended V1 priorities (fastest to build): Dot.link, Kudos, Countdown, Proof Board. Full candidate list maintained by Rebecca.
+**Tier 2 — Sample apps** (~4 V1, ≥10 V2). Each is its own repo, pinned. **No `quests.json`** — quest ideas live in the README. Sample app deploys earn 0 XP under v0.18 scoring (no XP for the act of deploying — see XP section). **Feedback Board** (Todor) is built. The Ballot, Kudos, Countdown, Pact are candidates — 3 more sample apps need commissioning + builders before 31 May.
 
 Sample app spec: start from `playground-app-template`, ship a README (quest ideas + SDK packages + key files), idempotent `setup.sh`, `.claude/skills/app-context.md` (~10 lines). Must be moddable (public GitHub). Size limit: one Bulletin chunk (~10 MB, TBC). Naming `sample-<name>-app`.
 
@@ -232,44 +232,72 @@ The empty/starter template (`paritytech/playground-app-template`) is **pinned al
 
 ## XP and stars
 
-Points are renamed to **XP** throughout V1 (aligns with design).
+Points are referred to as **XP** throughout V1.
 
 **XP = leaderboard score (Top Builders).** Stored on-chain as a per-account running balance. XP only goes up.
 
-| Action | XP | Notes |
+| Action | XP displayed | Raw contract | Notes |
+|---|---|---|---|
+| Tutorial completed | 100 | 10 | Flat on tutorial deploy. Requires tutorial flag (CR6 — pending). |
+| New app deployed | 0 | 0 | Deploying with AI is low-skill; XP rewards what others think of your app, not the act. |
+| Moddable deploy bonus | 0 | 0 | No bonus; the incentive to be moddable is the much larger "your app is modded" payout. |
+| Star received | 10 | 1 | Per star awarded to your app. |
+| Someone mods your app | 50 | 5 | Strongest single-signal award. Dedupe per `(modder, source_domain)`. |
+
+The contract stores raw values; UI applies a uniform 10× multiplier on display. CLI output that surfaces XP should match — multiply contract reads by 10 before showing the user.
+
+**Stars = what users award.** Binary, one-way, permanent. Cumulative count displayed (never average X.X / 5). Self-starring forbidden at the contract level. Unlimited per user. Each star earns the app owner 10 XP. **No `unstar` method** (CR2 — code change pending): stars are an XP transfer, and an unstar method would be a points-removal griefing vector.
+
+**`modded_from` is off-chain metadata, not contract storage.** At publish time the CLI passes `modded_from` as a transient `publish()` parameter — the contract uses it to award the "your app is modded" XP to the source owner and update `mod_credited`, then discards it. The "Modded from: domain01.dot" lineage rendered on the App Detail Page reads from the off-chain Bulletin metadata blob.
+
+**Leaderboard is V1.** Top Builders reads `get_top_builders` and applies the 10× display multiplier. "Most starred" and "most modded" sort options on the Apps grid are V2.
+
+## Prize logistics
+
+~$2,000 prize pool, split four ways at $500 each:
+
+| Prize | Awarded for | Determined by |
 |---|---|---|
-| Tutorial level completed | 25 | Max 100. Once per `(account, track_id, quest_id)`. |
-| New app deployed | 10 | First deploy per domain only. |
-| Star received | 10 | Per star awarded to your app. |
-| Someone mods your app | 25 | New in v0.12 — strongest signal. Tracked via `mod_count`. |
+| Top Builder | Highest total XP at closing | On-chain `get_top_builders` |
+| Most Modded App | The single app with highest `mod_count` | On-chain per-app counter |
+| Most Starred App | The single app with highest `star_count` | On-chain per-app counter |
+| Wildcards | Judges' picks for innovative or noteworthy apps | Judges at venue, off-chain |
 
-**Stars = what users award.** Cumulative total displayed (never average X.X / 5), one-way (can upgrade but cannot remove), self-starring forbidden at contract level, unlimited per user. Each star earns the owner +10 XP. **Binary vs max-2 stars decision pending.**
+Ties on per-app prizes are split equally. Tutorial completion is verifiable from the registry via the tutorial flag — no manual verification needed.
 
-Leaderboard UI and "most modded" / "most starred" sort options moved from V1 to V2 in v0.12. The on-chain XP balance is still V1 — venue screens can read it directly.
+## Display names
+
+Precedence (implemented in playground-app via `displayNameForAccount`):
+
+1. **Registry username** — claimed by the user via the in-app `SetUsernameModal`. Stored on the registry contract via `set_username`. Lowercase-normalised, case-insensitive uniqueness enforced.
+2. **Wallet name from host** — the OS-level account label the user set in their Polkadot mobile app. Read via Host API at runtime. No on-chain footprint.
+3. **Truncated H160** — fallback, e.g. `0x4a3b…f2d1`. Used when the user has neither claimed a username nor named the account on their phone.
+
+CLI output that surfaces the user's display name should match the precedence — read the registry first, fall back to wallet name, fall back to truncated H160. The "You're live as [current display name]" line in post-deploy output uses the same lookup.
+
+**Out of scope:** adjective-noun name generation, Bulletin storage for names, first-encounter ceremony reveal moment. The wallet-name fallback handles the common case; the modal handles the upgrade path.
 
 ## RevX deep-link contract
 
-`revx.dev/editor?mod=<domain>` — `mod=<domain>` required, **no `&quest=` param** (level picker lives inside RevX). Single "Open in RevX" button per app, same for tutorial / sample / participant apps.
+`revx.dev/editor?mod=<domain>&quest=<level>` — `mod=` required; `quest=` only for the tutorial (RevX reads `quests.json`, checks out the right branch, loads the per-level AI skill). Single "Open in RevX" button per app, same for tutorial / sample / participant apps.
 
-RevX downloads source as HTTPS tarball (same as the CLI). After load: PoP auth (QR on desktop, direct on mobile), AI chat pre-loaded with the template's `CLAUDE.md` + Product SDK skills, CLI bridge maps RevX UI actions to `dot build`, `dot deploy --playground`.
+RevX downloads source as HTTPS tarball (same as the CLI). After load: PoP auth (QR on desktop, direct on mobile), AI chat pre-loaded with the template's `CLAUDE.md` + Product SDK skills, CLI bridge maps RevX UI actions to `dot build`, `dot deploy --playground`. RevX should default to working RPC config so testers don't need to manually switch network.
 
 ⚠️ **Web container constraint:** the RevX browser web container is Node/TS/JS only — cannot run the IPFS binary. The CLI's Kubo-binary path (see `jsMerkle: false` invariant) blocks RevX's main storage upload until bulletin-deploy's pure-JS merkleizer is fixed.
 
-GitHub login in RevX is currently deactivated pending security review.
-
 ## CLI deep-link contract (`dot mod`)
 
-`dot mod` downloads source as an HTTPS tarball — no git, no `gh`, no clone. Forms: `dot mod` (interactive picker over moddable apps), `dot mod <domain>` (direct). After download, `setup.sh` runs and stays visible/logged. `dot mod` writes the source domain to local metadata, passed at deploy time so the registry can store "Modded from: [domain]". *Modded-from metadata capture is not yet built (V1 P0).*
+`dot mod` downloads source as an HTTPS tarball via `codeload.github.com` — no git, no `gh`, no clone. Forms: `dot mod` (interactive picker over moddable apps), `dot mod <domain>` (direct). After download, `setup.sh` runs and stays visible/logged. `dot mod` writes the source domain into deploy metadata; at publish time the CLI passes it as the transient `modded_from` parameter to the registry's `publish()`, which awards the source owner the "your app is modded" XP and updates `mod_credited`.
 
-Subsequent commands: `dot build` (auto-detects Rust/Solidity/EVM + frontend, picks the package manager), `dot deploy --playground` (full 5-step pipeline — **should default to moddable**; current code defaults non-moddable, needs fixing).
+Subsequent commands: `dot build` (auto-detects Rust/Solidity/EVM + frontend, picks the package manager), `dot deploy --playground` (full 5-step pipeline). The moddable-by-default fix (#24) is V1 P0 — current code defaults non-moddable and Session 02 testers (Will, others) hit `--moddable requires a GitHub origin` and were stopped from deploying.
 
 ## Moddable default flow
 
-`dot deploy --playground` **should default to moddable** (current code defaults non-moddable — bug). The spec-level intent is to read an existing public GitHub origin, deploy moddable automatically, and prompt only if missing. **The CLI itself never invokes `gh`** (see invariants above) — that's the playground-app's job, not the CLI's. Non-moddable apps still get DotNS + Bulletin links; they just can't be cloned.
+`dot deploy --playground` should default to moddable. Current code defaults non-moddable — Session 02 testers hit `--moddable requires a GitHub origin` and were blocked from deploying. The spec-level intent is to read an existing public GitHub origin, deploy moddable automatically, and prompt only if missing. **The CLI itself never invokes `gh`** (see invariants above) — that's the playground-app's job, not the CLI's. Non-moddable apps still get DotNS + Bulletin links; they just can't be cloned.
 
 ## quests.json (tutorial only)
 
-In v0.12 only the tutorial ships a `quests.json`. Sample apps don't.
+Only the tutorial ships a `quests.json` — it's the manifest RevX reads to check out per-level branches and load per-level AI skill files (`.claude/skills/level-N-*.md`). Sample apps do NOT have a `quests.json` — quest ideas in their README are plain text inspiration. The CLI `--quest` flag was removed because the picker happens inside the editor (RevX's QuestPickerDialog or `dot mod`'s SetupScreen), not because quests are gone.
 
 ```json
 {
@@ -277,7 +305,6 @@ In v0.12 only the tutorial ships a `quests.json`. Sample apps don't.
   "track_id": "unique-track-id",
   "title": "App Name",
   "description": "Brief description",
-  "total_points": 100,
   "quests": [
     {
       "id": "quest-id",
@@ -287,7 +314,6 @@ In v0.12 only the tutorial ships a `quests.json`. Sample apps don't.
       "branch": "quest/branch-name",
       "required_tools": ["dot-cli"],
       "ai_skill_hints": [".claude/skills/skill-file.md"],
-      "points": 25,
       "teaches": ["concept 1", "concept 2"],
       "summary": "What the developer will do and mod",
       "acceptance": ["Specific, testable criterion 1", "..."]
@@ -296,19 +322,27 @@ In v0.12 only the tutorial ships a `quests.json`. Sample apps don't.
 }
 ```
 
-The tutorial repo also ships `setup.sh` + `.claude/skills/`. app#101 propagates generic Product SDK skills into all templates and sample apps automatically.
+The tutorial repo also ships `setup.sh` + `.claude/skills/`. Generic Product SDK skills are propagated into templates and sample apps via `playground-app-template`.
 
 ## V1 CLI feature scope
 
-P0 / P1:
-- `dot init` — first-time setup, QR auth, session key, dependency install. Parallelised dep install (~3 min saving) not yet built.
-- `dot mod` — HTTPS tarball, interactive picker, source-domain capture (not yet built, V1 P0).
-- `dot build` — auto-detect Rust/Solidity/EVM + frontend.
-- `dot deploy --playground` — full 5-step pipeline; default-moddable bug fix outstanding.
-- `dot logout`, `dot update` (works via npm for RevX).
-- Plain-English error messages for all common on-chain failures (replacement tables in playground-app's CLAUDE.md / spec).
+- `dot init` — first-time setup, QR auth, session key, dependency install (login + toolchain run concurrently), funding, account mapping, Bulletin allowance, optional playground username claim. Alice grants 1000 tx / 100MB. Alice sends 10 PAS if balance < 1 PAS. `Revive.map_account` signed by user.
+- `dot mod` — HTTPS tarball via `codeload.github.com`, interactive picker over moddable apps, source-domain capture, moddable preflight check.
+- `dot build` — auto-detect Rust/Solidity/EVM + frontend, picks the package manager.
+- `dot deploy --playground` — full 5-step pipeline. Flags: `--signer dev|phone`, `--domain`, `--buildDir`, `--no-build`, `--playground`, `--private`, `--moddable`/`--no-moddable`, `--suri`, `--env` (defaults to `paseo-next-v2`).
+- `dot contract` — contract install + deploy.
+- `dot decentralize` — point at a live static site URL (e.g. a GitHub Pages page), get back a `.dot` URL hosted on Bulletin. Interactive TUI by default; headless with `--site=<url>`. Optional `--playground` flag also publishes to the playground registry. The spec lists this as V2.5 `dot import`; the CLI ships it earlier under a different name.
+- `dot logout`, `dot update` (self-update from GitHub releases).
+- Plain-English error messages for all common on-chain failures. Session 02 raw-error blockers: PoP/DotNS ~100-word unrecoverable error, chunk-verification `Missing CIDs: bafkrei...` mid-deploy, raw npm EEXIST and JSON Parse EOF errors.
+- Mobile signing hang detection — inline fallback prompt if mobile signing has no response after N seconds: "Mobile signing hasn't responded — retry, or use a dev signer? [y/N]".
+- Up-front phone approval count on `dot deploy`: "This will need 3 approvals on your phone — keep it ready."
+- `dot mod` post-clone UX — auto-`cd` into cloned dir or surface a clear copyable `cd <name>` line; detect when `dot deploy` is run from outside a project and print a helpful message.
 
 **Removed from V1, do not reintroduce:** `dot voucher`, conditional voucher prompt at `dot init`, soft-limit communication, Bulletin expiry countdown / two-week expiry narrative.
+
+## CLI command rename (open)
+
+`dot` is being renamed — it collides with too many existing tools and with Polkadot's own product family. Candidates so far: `play-dot`, `playdot`, `dotdeploy`. Affects binaries, `install.sh`, README, IslandPortal copy, on-site materials, tutorial scripts. Decision needed before on-site materials are printed.
 
 ## Vocabulary the product uses
 
@@ -321,7 +355,7 @@ CLI output, error messages, and command names should follow:
 | The modified version | your mod / your app | your fork / your remix |
 | Full deploy + publish | `dot deploy --playground` | dot ship |
 | Publishing to the registry | deploy / publish | submit / upload / release |
-| The structured tutorial | tutorial / The Stadium | tutorial track / tutorial quest |
+| The structured tutorial | Rock Paper Scissors tutorial / the tutorial | The Stadium / Polkadot Games Tutorial |
 | Open-ended modding challenge | quest idea | hackathon / challenge |
 | Working apps with quest ideas | sample apps | templates / starter apps |
 | User identity | account | wallet |
@@ -333,12 +367,13 @@ CLI output, error messages, and command names should follow:
 ## Out of scope (per spec)
 
 - Building from scratch (entry is always tutorial / sample app / empty starter).
-- Multiple tutorial tracks (The Stadium is the only one).
+- Multiple tutorial tracks (Rock Paper Scissors is the only structured tutorial).
 - DeFi quests (regulatory).
-- Permanent deletion by owners (visibility toggle only).
+- Permanent deletion by owners (visibility toggle only; admin hard delete is admin-only).
 - Account creation outside the Polkadot app / PoP flow.
 - Contract-modding on mobile (Level 1 / UI-only quests on phone).
 - Chat Extensions sharing.
 - Vouchers / `dot voucher` / soft-limit messaging / Bulletin expiry countdown UI.
-- Account status component (#67) — parked, intentional given the devnet.
+- Account status component — parked, intentional given the devnet.
 - DOT airdrop as a W3S mechanism.
+- Display name generation — no adjective-noun generator, no Bulletin storage for names, no first-encounter ceremony.
