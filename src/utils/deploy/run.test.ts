@@ -25,6 +25,9 @@ const {
     detectBuildConfigMock,
     loadDetectInputMock,
     withSpanMock,
+    getBulletinAllowanceSignerMock,
+    readSlotAccountKeyMock,
+    getSlotAccountAddressMock,
 } = vi.hoisted(() => ({
     runStorageDeploy: vi.fn<
         (arg: any) => Promise<{
@@ -57,9 +60,23 @@ const {
         configFiles: new Set<string>(),
     })),
     withSpanMock: vi.fn(async (_op: string, _name: string, _attrs: any, fn: any) => fn()),
+    getBulletinAllowanceSignerMock: vi.fn(async () => ({
+        publicKey: new Uint8Array(32),
+        signTx: async () => new Uint8Array(64),
+        signBytes: async () => new Uint8Array(64),
+    })),
+    readSlotAccountKeyMock: vi.fn(async () => new Uint8Array(32).fill(0x42)),
+    getSlotAccountAddressMock: vi.fn(() => "5SlotAddress"),
 }));
 
 vi.mock("./storage.js", () => ({ runStorageDeploy }));
+vi.mock("../allowances/bulletin.js", () => ({
+    getBulletinAllowanceSigner: getBulletinAllowanceSignerMock,
+}));
+vi.mock("../allowances/slotKeys.js", () => ({
+    readSlotAccountKey: readSlotAccountKeyMock,
+    getSlotAccountAddress: getSlotAccountAddressMock,
+}));
 vi.mock("./playground.js", () => ({
     publishToPlayground: publishToPlaygroundMock,
     normalizeDomain: (d: string) => {
@@ -111,6 +128,9 @@ beforeEach(() => {
     publishToPlaygroundMock.mockClear();
     runBuildMock.mockClear();
     withSpanMock.mockClear();
+    getBulletinAllowanceSignerMock.mockClear();
+    readSlotAccountKeyMock.mockClear();
+    getSlotAccountAddressMock.mockClear();
 });
 
 describe("runDeploy", () => {
@@ -379,5 +399,65 @@ describe("runDeploy", () => {
         expect(ops).toContain("cli.deploy.build");
         expect(ops).toContain("cli.deploy.storage-dotns");
         expect(ops).toContain("cli.deploy.playground");
+    });
+
+    it("phone mode: slot signer injected into storage auth when resolution succeeds", async () => {
+        // getBulletinAllowanceSigner succeeds → storageSigner + storageSignerAddress
+        // must appear in the auth object passed to runStorageDeploy.
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "/tmp/proj/dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "phone",
+            publishToPlayground: false,
+            userSigner: fakeUserSigner,
+            onEvent: push,
+        });
+
+        expect(getBulletinAllowanceSignerMock).toHaveBeenCalledTimes(1);
+        const arg = runStorageDeploy.mock.calls[0][0];
+        // The wrapped signer (from maybeWrapAuthForSigning) carries storageSignerAddress through.
+        expect(arg.auth.storageSignerAddress).toBe("5SlotAddress");
+        expect(arg.auth.storageSigner).toBeDefined();
+    });
+
+    it("dev mode: getBulletinAllowanceSigner is NOT called", async () => {
+        const { push } = collectEvents();
+        await runDeploy({
+            projectDir: "/tmp/proj",
+            buildDir: "/tmp/proj/dist",
+            skipBuild: true,
+            domain: "my-app",
+            mode: "dev",
+            publishToPlayground: false,
+            userSigner: null,
+            onEvent: push,
+        });
+
+        expect(getBulletinAllowanceSignerMock).not.toHaveBeenCalled();
+    });
+
+    it("phone mode: slot resolution failure does not abort deploy (pool fallback)", async () => {
+        getBulletinAllowanceSignerMock.mockRejectedValueOnce(new Error("allocation failed"));
+        const { push } = collectEvents();
+        // Should resolve normally — error is swallowed, pool is used.
+        await expect(
+            runDeploy({
+                projectDir: "/tmp/proj",
+                buildDir: "/tmp/proj/dist",
+                skipBuild: true,
+                domain: "my-app",
+                mode: "phone",
+                publishToPlayground: false,
+                userSigner: fakeUserSigner,
+                onEvent: push,
+            }),
+        ).resolves.toBeDefined();
+
+        // auth must NOT contain storageSigner (slot resolution failed).
+        const arg = runStorageDeploy.mock.calls[0][0];
+        expect(arg.auth.storageSignerAddress).toBeUndefined();
     });
 });

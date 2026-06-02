@@ -35,6 +35,7 @@ import {
     type DeployOptions,
     type DeployResult,
 } from "bulletin-deploy";
+import type { PolkadotSigner } from "polkadot-api";
 import { DeployLogParser, type DeployLogEvent } from "./progress.js";
 import { getChainConfig, type Env } from "../../config.js";
 
@@ -53,7 +54,15 @@ export interface StorageDeployOptions {
      * Auth options forwarded to bulletin-deploy. Usually produced by
      * `resolveSignerSetup()`. May be `{}` for the dev path.
      */
-    auth: Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic">;
+    auth: Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic"> & {
+        /**
+         * Slot-account signer for Bulletin storage writes. Forwarded to
+         * bulletin-deploy unchanged; 0.7.x ignores it silently, 0.8.x routes
+         * chunk uploads through this signer's allowance instead of the pool.
+         */
+        storageSigner?: PolkadotSigner;
+        storageSignerAddress?: string;
+    };
     /** Emits progress events derived from bulletin-deploy's log output. */
     onLogEvent?: (event: DeployLogEvent) => void;
     /** Target environment — currently only `testnet` is supported. */

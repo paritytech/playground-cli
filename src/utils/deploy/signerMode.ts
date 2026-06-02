@@ -37,6 +37,7 @@
  */
 
 import { DEFAULT_MNEMONIC, type DeployOptions } from "bulletin-deploy";
+import type { PolkadotSigner } from "polkadot-api";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import type { ResolvedSigner } from "../signer.js";
@@ -95,7 +96,23 @@ export interface DeploySignerSetup {
      * phone mode we inject the user's signer so DotNS registration is paid
      * for by — and recorded against — their account.
      */
-    bulletinDeployAuthOptions: Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic">;
+    bulletinDeployAuthOptions: Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic"> & {
+        /**
+         * Slot-account signer for Bulletin storage writes. When present,
+         * bulletin-deploy routes chunk uploads through this signer's
+         * allowance instead of the pool. Only populated in phone mode when
+         * `getBulletinAllowanceSigner` succeeds; pool fallback otherwise.
+         *
+         * NOTE: `storageSigner` / `storageSignerAddress` are present in
+         * `DeployOptions` only from bulletin-deploy v0.8.x onward. The
+         * intersection is used here because the npm-published 0.7.x types
+         * don't carry these fields yet; the spread in storage.ts passes them
+         * through silently to the runtime where they become effective once
+         * bulletin-deploy is updated.
+         */
+        storageSigner?: PolkadotSigner;
+        storageSignerAddress?: string;
+    };
 
     /**
      * Signer used to call `registry.publish()` for the playground step.

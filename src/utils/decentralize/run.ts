@@ -41,6 +41,8 @@ import {
 import { runStorageDeploy } from "../deploy/storage.js";
 import type { ResolvedSigner } from "../signer.js";
 import { mirrorSite } from "./mirror.js";
+import { getBulletinAllowanceSigner } from "../allowances/bulletin.js";
+import { getSlotAccountAddress, readSlotAccountKey } from "../allowances/slotKeys.js";
 
 export type DecentralizeLogEvent =
     | { kind: "mirror-start"; url: string }
@@ -167,6 +169,34 @@ export async function runDecentralize(
             fileCount: mirror.fileCount,
             directory: mirror.uploadRoot,
         });
+
+        // Phone mode: attempt to resolve a BulletIn slot-account signer so
+        // chunk uploads use the user's own allowance instead of the shared
+        // pool. Falls back silently to pool if absent or resolution fails.
+        if (mode === "phone" && userSigner) {
+            try {
+                const slotSigner = await getBulletinAllowanceSigner({
+                    env,
+                    ownerAddress: userSigner.address,
+                    publishSigner: userSigner,
+                });
+                const slotKey = await readSlotAccountKey(
+                    env,
+                    userSigner.address,
+                    "BulletInAllowance",
+                );
+                const slotSs58 = slotKey ? getSlotAccountAddress(slotKey) : undefined;
+                if (slotSs58) {
+                    setup.bulletinDeployAuthOptions = {
+                        ...setup.bulletinDeployAuthOptions,
+                        storageSigner: slotSigner,
+                        storageSignerAddress: slotSs58,
+                    };
+                }
+            } catch {
+                // Slot signer resolution failed — pool fallback handled by bulletin-deploy.
+            }
+        }
 
         onEvent?.({ kind: "storage-start", fullDomain });
         const result = await runStorageDeploy({

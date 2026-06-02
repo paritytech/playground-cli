@@ -26,6 +26,10 @@ import { runBuild, loadDetectInput, detectBuildConfig, type BuildConfig } from "
 import { publishToPlayground, normalizeDomain } from "./playground.js";
 import { resolveSignerSetup, type SignerMode, type DeployApproval } from "./signerMode.js";
 import {
+    getBulletinAllowanceSigner,
+} from "../allowances/bulletin.js";
+import { getSlotAccountAddress, readSlotAccountKey } from "../allowances/slotKeys.js";
+import {
     wrapSignerWithEvents,
     createSigningCounter,
     type SigningCounter,
@@ -34,7 +38,7 @@ import {
 import type { DeployLogEvent } from "./progress.js";
 import { withDeployPhase } from "./phase.js";
 import type { ResolvedSigner } from "../signer.js";
-import type { Env } from "../../config.js";
+import { DEFAULT_ENV, type Env } from "../../config.js";
 import type { DeployPlan } from "./availability.js";
 
 // ── Events ───────────────────────────────────────────────────────────────────
@@ -115,6 +119,36 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
     });
 
     options.onEvent({ kind: "plan", approvals: setup.approvals });
+
+    // Phone mode: attempt to resolve a BulletIn slot-account signer so chunk
+    // uploads use the user's own allowance instead of the shared pool. Falls
+    // back silently to pool if the key is absent or resolution fails for any
+    // reason — bulletin-deploy handles the pool path internally.
+    if (options.mode === "phone" && options.userSigner) {
+        const resolvedEnv = options.env ?? DEFAULT_ENV;
+        try {
+            const slotSigner = await getBulletinAllowanceSigner({
+                env: resolvedEnv,
+                ownerAddress: options.userSigner.address,
+                publishSigner: options.userSigner,
+            });
+            const slotKey = await readSlotAccountKey(
+                resolvedEnv,
+                options.userSigner.address,
+                "BulletInAllowance",
+            );
+            const slotSs58 = slotKey ? getSlotAccountAddress(slotKey) : undefined;
+            if (slotSs58) {
+                setup.bulletinDeployAuthOptions = {
+                    ...setup.bulletinDeployAuthOptions,
+                    storageSigner: slotSigner,
+                    storageSignerAddress: slotSs58,
+                };
+            }
+        } catch {
+            // Slot signer resolution failed — pool fallback handled by bulletin-deploy.
+        }
+    }
 
     const counter = createSigningCounter(setup.approvals.length);
 
