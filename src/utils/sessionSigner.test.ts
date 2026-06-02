@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import type { UserSession } from "@parity/product-sdk-terminal";
@@ -125,5 +125,80 @@ describe("init / deploy / playground-app account equivalence", () => {
         // The CLI must use the same productId so both derive the SAME account from
         // a given user mnemonic.
         expect(PLAYGROUND_PRODUCT_ID).toEqual("playground.dot");
+    });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// signRaw(Payload) anti-regression — guards against accidental revert to the
+// signPayload path (which sends 2 MB calldata to mobile wallets).
+// ────────────────────────────────────────────────────────────────────────────
+describe("createPlaygroundSessionSigner — signRaw(Payload) routing", () => {
+    type OkResult<T> = { isErr(): false; isOk(): true; value: T };
+    type ErrResult<E> = { isErr(): true; isOk(): false; error: E };
+    function okResult<T>(value: T): OkResult<T> {
+        return { isErr: () => false as const, isOk: () => true as const, value };
+    }
+    function errResult<E>(error: E): ErrResult<E> {
+        return { isErr: () => true as const, isOk: () => false as const, error };
+    }
+
+    function makeSession(opts: {
+        signRaw?: (req: unknown) => Promise<unknown>;
+        signPayload?: (req: unknown) => Promise<unknown>;
+    } = {}) {
+        const root = seedToAccount("bottom drive obey lake curtain smoke basket hold race lonely fit walk", "");
+        return {
+            id: "test",
+            localAccount: { accountId: new Uint8Array(32), pin: undefined },
+            remoteAccount: { accountId: root.publicKey, publicKey: root.publicKey, pin: undefined },
+            rootAccountId: root.publicKey,
+            signRaw: vi.fn(opts.signRaw ?? (async () => { throw new Error("signRaw not stubbed"); })),
+            signPayload: vi.fn(opts.signPayload ?? (async () => { throw new Error("signPayload not stubbed"); })),
+        } as unknown as UserSession & { signRaw: ReturnType<typeof vi.fn>; signPayload: ReturnType<typeof vi.fn> };
+    }
+
+    test("signBytes never calls session.signPayload (anti-regression: message-too-big)", async () => {
+        const sig = new Uint8Array(64).fill(0xaa);
+        const session = makeSession({
+            signRaw: async () => okResult({ signature: sig }),
+        });
+        const signer = createPlaygroundSessionSigner(session, {
+            productId: PLAYGROUND_PRODUCT_ID,
+            derivationIndex: 0,
+        });
+        await signer.signBytes(new Uint8Array([1]));
+        expect(session.signPayload).not.toHaveBeenCalled();
+        expect(session.signRaw).toHaveBeenCalled();
+        const req = (session.signRaw.mock.calls[0] as [{ data: { tag: string } }])[0];
+        expect(req.data.tag).toBe("Bytes");
+    });
+
+    test("signBytes routes through signRaw with Bytes tag", async () => {
+        const sig = new Uint8Array(64).fill(0xbb);
+        const session = makeSession({
+            signRaw: async () => okResult({ signature: sig }),
+        });
+        const signer = createPlaygroundSessionSigner(session, {
+            productId: PLAYGROUND_PRODUCT_ID,
+            derivationIndex: 0,
+        });
+        const out = await signer.signBytes(new Uint8Array([1, 2, 3]));
+        expect(out).toEqual(sig);
+        expect(session.signPayload).not.toHaveBeenCalled();
+        const req = (session.signRaw.mock.calls[0] as [{ data: { tag: string } }])[0];
+        expect(req.data.tag).toBe("Bytes");
+    });
+
+    test("mobile rejection surfaces as 'Mobile signing rejected:' prefix", async () => {
+        const session = makeSession({
+            signRaw: async () => errResult({ message: "user declined" }),
+        });
+        const signer = createPlaygroundSessionSigner(session, {
+            productId: PLAYGROUND_PRODUCT_ID,
+            derivationIndex: 0,
+        });
+        await expect(signer.signBytes(new Uint8Array([1]))).rejects.toThrow(
+            "Mobile signing rejected: user declined",
+        );
     });
 });
