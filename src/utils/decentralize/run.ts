@@ -175,6 +175,10 @@ export async function runDecentralize(
         // pool. Falls back silently to pool if absent or resolution fails.
         if (mode === "phone" && userSigner) {
             try {
+                onEvent?.({
+                    kind: "signing",
+                    event: { label: "Approve Bulletin storage allowance" },
+                } as any);
                 const slotSigner = await getBulletinAllowanceSigner({
                     env,
                     ownerAddress: userSigner.address,

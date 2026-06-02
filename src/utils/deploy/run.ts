@@ -127,6 +127,10 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
     if (options.mode === "phone" && options.userSigner) {
         const resolvedEnv = options.env ?? DEFAULT_ENV;
         try {
+            options.onEvent({
+                kind: "signing",
+                event: { label: "Approve Bulletin storage allowance" },
+            } as any);
             const slotSigner = await getBulletinAllowanceSigner({
                 env: resolvedEnv,
                 ownerAddress: options.userSigner.address,

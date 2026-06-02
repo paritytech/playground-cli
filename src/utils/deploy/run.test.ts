@@ -404,7 +404,7 @@ describe("runDeploy", () => {
     it("phone mode: slot signer injected into storage auth when resolution succeeds", async () => {
         // getBulletinAllowanceSigner succeeds → storageSigner + storageSignerAddress
         // must appear in the auth object passed to runStorageDeploy.
-        const { push } = collectEvents();
+        const { events, push } = collectEvents();
         await runDeploy({
             projectDir: "/tmp/proj",
             buildDir: "/tmp/proj/dist",
@@ -421,6 +421,16 @@ describe("runDeploy", () => {
         // The wrapped signer (from maybeWrapAuthForSigning) carries storageSignerAddress through.
         expect(arg.auth.storageSignerAddress).toBe("5SlotAddress");
         expect(arg.auth.storageSigner).toBeDefined();
+
+        // A signing event must be emitted BEFORE getBulletinAllowanceSigner is
+        // called so the TUI can show "check your phone" while the allocator runs.
+        const signingEvents = events.filter((e) => e.kind === "signing") as Array<{
+            kind: "signing";
+            event: any;
+        }>;
+        expect(
+            signingEvents.some((e) => e.event?.label === "Approve Bulletin storage allowance"),
+        ).toBe(true);
     });
 
     it("dev mode: getBulletinAllowanceSigner is NOT called", async () => {
