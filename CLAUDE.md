@@ -118,7 +118,7 @@ These aren't self-evident from reading the code and have bitten us before. Treat
 
 # Product context: playground.dot
 
-Source: Playground Full Spec v0.31, June 2026. Team: Ionut (TL), Rebecca (PM), Charles, Utkarsh, Todor, Reinhard, Sveta (Design), Karim (Dept), RevX team (parallel). Kanban: https://github.com/orgs/paritytech/projects/278.
+Source: Playground Full Spec v0.45, June 2026. Team: Ionut (TL), Rebecca (PM), Charles, Utkarsh, Todor, Reinhard, Sveta (Design), Karim (Dept), RevX team (parallel). Kanban: https://github.com/orgs/paritytech/projects/278.
 
 ## What it is
 
@@ -227,12 +227,12 @@ Three tiers share the same contract; the frontend differentiates via pinning + A
 
 | Level | Name | Scope | Mobile |
 |---|---|---|---|
-| 1 | Local Challenger | Mod UI/theming. No contract changes | ✅ Fully supported |
-| 2 | On-Chain Record | Save game results to Bulletin | ✅ RevX (no contracts — frontend only) |
-| 3 | The Leaderboard | Deploy leaderboard smart contract | ❌ CLI + laptop only (RevX dropped Solidity/Rust support) |
-| 4 | Multiplayer | P2P via Statement Store. Challenge via link/QR | ❌ CLI + laptop only |
+| 1 | Local Challenger | Mod UI/theming. No contract changes | Yes — fully supported |
+| 2 | On-Chain Record | Save game results to Bulletin | Yes — RevX (no contracts — frontend only) |
+| 3 | The Leaderboard | Deploy leaderboard smart contract | No — CLI + laptop only (RevX dropped Solidity/Rust support) |
+| 4 | Multiplayer | P2P via Statement Store. Challenge via link/QR | No — CLI + laptop only |
 
-**XP:** 100 XP awarded on the user's first-ever deploy (deploy #1 on the account), 50 XP on the second. In practice the first deploy will almost always be the tutorial deploy. After that, deploys earn 0 XP — reward shifts to social signal (stars + mods received). See CR6 in the XP section. IslandPortal popup framing should say "your first deploy earns 100 XP" (not "tutorial = 100 XP") — the award is on deploy #1 regardless of source.
+**XP:** +100 XP on each of your first two deploys (gated on `get_owner_app_count`); 3rd+ deploys earn 0. In practice deploy #1 is the tutorial deploy, deploy #2 the first solo app. Reward then shifts to social signal (stars + mods received). See the XP section. IslandPortal popup framing should say "your first deploy earns 100 XP" (not "tutorial = 100 XP") — the +100 bonus applies to your first two deploys whichever path you take.
 
 **Tier 2 — Sample apps** (~4 V1, ≥10 V2). Each is its own repo, pinned. **No `quests.json`** — quest ideas live in the README. Once the user has used their two first-deploy bonuses, sample app deploys earn 0 XP (see XP section). **Feedback Board** (Todor) is built. The Ballot, Kudos, Countdown, Pact are candidates — 3 more sample apps need commissioning + builders.
 
@@ -248,42 +248,40 @@ Points are referred to as **XP** throughout V1.
 
 **XP = leaderboard score (Top Builders).** Stored on-chain as a per-account running balance. XP only goes up.
 
-| Action | XP displayed | Raw contract | Notes |
-|---|---|---|---|
-| First-ever deploy | 100 | 10 | Awarded once per account when `deploy_count == 1`. In practice the user's tutorial deploy (the structured first step). Tracked via per-account `deploy_count` counter on the registry — see CR6. |
-| Second-ever deploy | 50 | 5 | Awarded once per account when `deploy_count == 2`. In practice the user's first solo / non-tutorial app. |
-| Subsequent deploys | 0 | 0 | Reward shifts entirely to social signal (stars + mods received). Keeps the Apps tab usable as a discovery surface. |
-| Moddable deploy bonus | 0 | 0 | No bonus; the incentive to be moddable is the much larger "your app is modded" payout. |
-| Star received | 10 | 1 | Per star awarded to your app. |
-| Someone mods your app | 50 | 5 | Strongest single-signal award. Dedupe per `(modder, source_domain)`. |
+| Action | XP | Cap / dedupe |
+|---|---|---|
+| Each of your first two deploys | +100 | First 2 only; 3rd+ = 0. Gated on `get_owner_app_count` (monotonic — farm-safe). Deploy #1 is in practice the tutorial, #2 the first solo app. |
+| Someone mods your app | +50 | Per `(modder, source_domain)` pair, deduped. Strongest single-signal award. |
+| Someone stars your app | +10 | Per star awarded to your app. |
+| Setting a registry username | +25 | One-time, guarded by `username_bonus_awarded` flag. |
+| Moddable deploy bonus | 0 | Moddability no longer adds deploy XP — the payoff is the +50 someone-mods-your-app award. |
 
-**Why first-N-deploys instead of a tutorial flag.** Earlier scoring used a per-deploy `is_tutorial: bool` flag to award 100 XP for tutorial completion. The flag was gameable — any caller hitting the contract directly could set it `true` and farm 100 XP per deploy. The new counter approach is ungameable on the contract side (no flag to lie about) and lands almost the same outcome: deploy #1 is in practice the tutorial deploy, deploy #2 is the user's first solo app. Anything in the code/docs referring to a "tutorial flag" or `is_tutorial` field is stale — the replacement is a per-account `deploy_count` on the registry.
+**Contract awards absolute XP directly — no client multiplier (June 2026 rework).** The contract writes the displayed values straight into `account_points`. There is **no 10× multiplier, no client-side derivation, no per-row leaderboard fetch**. `get_top_builders` is directly usable for ranking, and CLI output that surfaces XP should render the contract value as-is. The old "raw values × 10 on display" model is gone — delete any code that multiplies contract reads.
 
-The contract stores raw values; UI applies a uniform 10× multiplier on display. CLI output that surfaces XP should match — multiply contract reads by 10 before showing the user.
+**Why first-two-deploys instead of a tutorial flag.** Earlier scoring used a per-deploy `is_tutorial` flag worth 100 XP; it was gameable (any caller could set it true and farm). Gating on `get_owner_app_count` is ungameable (a count is a count). Anything in code/docs referring to a "tutorial flag", `is_tutorial`, or a separate `deploy_count` field is stale.
 
-**Contract scoring constants — pending v14 redeploy.** CR1 drops `launch_delta` to 0 (currently `2 + if moddable { 1 } else { 0 }`) and bumps your-app-is-modded from raw 1 to raw 5. CR6 adds the per-account `deploy_count` for the first-N bonuses. Without these landing in the v14 redeploy, deploys still earn 20 XP each and modded apps earn 10 XP per mod — the prize behaviour won't match what the spec promises.
+**Contract rework rides the v14 redeploy. Tracking issues:** #286 (umbrella), **#287 P0** (star 1→10, mod-credit 1→50 — two one-line bumps, must-land), **#288 P0** (first-two-deploys +100, drop moddable bonus, gate on `get_owner_app_count` — must-land), **#289 P1** (username +25 — can slip without blocking Summit; if it slips the username action just awards no bonus). CR1/CR6/CR7 are closed (folded into this rework). If #287/#288 don't land in v14, prize behaviour won't match the spec.
 
-**Stars = what users award.** Binary, one-way, permanent. Cumulative count displayed (never average X.X / 5). Self-starring forbidden at the contract level. Unlimited per user. Each star earns the app owner 10 XP.
+**Stars = what users award.** Binary, one-way, permanent. Cumulative count displayed (never average X.X / 5). Self-starring forbidden at the contract level. Unlimited per user. Each star earns the app owner +10 XP.
 
-**CR2 status: `unstar` is still in the contract source AND the UI still has `handleUnstar`.** Spec position: stars should be one-way / permanent — the unstar path is a points-removal griefing vector (much easier to organise removing points from a competitor than awarding them). Both contract and UI changes pending.
+**CR2 status: `unstar` is still in the contract source AND the UI still has `handleUnstar`.** Spec position: stars should be one-way / permanent — the unstar path is a points-removal griefing vector (much easier to organise removing points from a competitor than awarding them). Both contract and UI changes pending. Interim policy until CR2 lands: `unstar` must NOT call `refund_points()` — `star_count` decrements (visible), but `account_points` stays at the earned value (don't deduct XP off the leaderboard).
 
 **`modded_from` is a transient `publish()` parameter, BUT lineage IS recorded on-chain.** v11 of the registry added `get_lineage(start, count)` / `get_lineage_count()`: each `(child, source)` edge is recorded in `lineage_at` with `lineage_recorded` per-domain dedupe. The CLI passes `modded_from` to award the "your app is modded" XP to the source owner and update `mod_credited`, then the contract also writes the lineage edge. The "Modded from: domain01.dot" string rendered on the App Detail Page still reads from the off-chain Bulletin metadata blob — pick whichever fits the call site.
 
-**Leaderboard is V1.** Top Builders reads `get_top_builders` and applies the 10× display multiplier. "Most starred" and "most modded" sort options on the Apps grid are V2 (in progress, on-chain sort indexes — Reinhard).
+**Leaderboard is V1.** Top Builders reads `get_top_builders` and renders the score as-is (no multiplier). "Most starred" / "most modded" sort options on the Apps grid shipped June 2026 (V2 #16 — Built, on-chain sort indexes).
 
 ## Prize logistics
 
-~$2,000 main pool, split four ways at $500 each, plus a small narrative "Spark" prize:
+**€5,000 total prize pool, finalised June 2026:**
 
-| Prize | Awarded for | Determined by |
+| Prize | Award | Determined by |
 |---|---|---|
-| Top Builder | Highest total XP at closing | On-chain `get_top_builders` |
-| Most Modded App | The single app with highest `mod_count` | On-chain per-app counter |
-| Most Starred App | The single app with highest `star_count` | On-chain per-app counter |
-| Wildcards | Judges' picks for innovative or noteworthy apps | Judges at venue, off-chain |
-| **Spark** (narrative) | Source app at the root of the longest mod chain at closing | Off-chain walk of `modded_from` metadata, or on-chain via `get_lineage`. Small prize (~$50 / merch / recognition); stacks with other prizes. |
+| Leaderboard 1st / 2nd / 3rd (most XP) | €1,000 / €500 / €250 | On-chain `get_top_builders` at closing |
+| Most Modded App | €1,000 | On-chain per-app `mod_count` at closing |
+| Most Starred App | €1,000 | On-chain per-app `star_count` at closing |
+| Wildcards (innovation / interesting use cases) | €500 × 2 | Judges at venue, off-chain — walk up and show them, no nomination form |
 
-Ties on per-app prizes are split equally. No "tutorial completion" verification step — prize eligibility reads directly from on-chain XP and per-app `mod_count` / `star_count`. The first-N-deploys bonuses (CR6) replace the old tutorial-flag mechanic.
+Ties on per-app prizes are split equally. No "tutorial completion" verification step — eligibility reads directly from on-chain XP and per-app `mod_count` / `star_count`. Judges' briefing weights coordinated work (pair-deploys, onboarding others, multi-author, modders building on each other). *(The earlier ~$2k pool and the "Spark" longest-mod-chain prize are dropped — don't reference them.)*
 
 ## Display names
 
@@ -307,17 +305,19 @@ RevX downloads source as HTTPS tarball (same as the CLI). After load: PoP auth (
 
 **RevX deep-link prepopulated prompts (built June 2026, V2 #86).** RevX accepts `?prompt=<url-encoded-text>` (clears project, loads starter Rust template, opens `src/starter.rs`, activates `polkavm` skill, auto-submits the prompt). Companion params: `?import=<cid>` (load by Bulletin CID), `?example=<name>`, `?fresh=1`, plus the original `?mod=<domain>`. So an IslandPortal CTA can open RevX with `?prompt=start%20tutorial` and the user is immediately in a building-with-AI state.
 
-⚠️ **Web container constraint:** the RevX browser web container is Node/TS/JS only — cannot run the IPFS binary. The CLI's Kubo-binary path (see `jsMerkle: false` invariant) blocks RevX's main storage upload until bulletin-deploy's pure-JS merkleizer is fixed.
+**Web container constraint:** the RevX browser web container is Node/TS/JS only — cannot run the IPFS binary. The CLI's Kubo-binary path (see `jsMerkle: false` invariant) blocks RevX's main storage upload until bulletin-deploy's pure-JS merkleizer is fixed.
 
 ## CLI deep-link contract (`playground mod`)
 
 `playground mod` downloads source as an HTTPS tarball via `codeload.github.com` — no git, no `gh`, no clone. Forms: `playground mod` (interactive picker over moddable apps), `playground mod <domain>` (direct). After download, `setup.sh` runs and stays visible/logged. `playground mod` writes the source domain into deploy metadata; at publish time the CLI passes it as the transient `modded_from` parameter to the registry's `publish()`, which awards the source owner the "your app is modded" XP and updates `mod_credited`. The contract also records the lineage edge in `lineage_at` (v11+).
 
-Subsequent commands: `playground build` (auto-detects Rust/Solidity/EVM + frontend, picks the package manager), `playground deploy --playground` (full 5-step pipeline). The moddable-by-default fix (#24) is V1 P0 — current code defaults non-moddable and Session 02 testers (Will, others) hit `--moddable requires a GitHub origin` and were stopped from deploying.
+Before `playground mod` touches the user's machine it shows a community-code disclaimer (`src/commands/mod/communityNotice.ts`, June 2026) — marketplace-standard "apps published by community, unreviewed; downloads source and runs setup script." This is the interim mitigation for #90 (setup.sh deprecation); the full setup.sh replacement is deferred.
+
+Subsequent commands: `playground build` (auto-detects Rust/Solidity/EVM + frontend, picks the package manager), `playground deploy --playground` (full 5-step pipeline). The moddable-by-default fix (#24) is V1 P0 — the interactive prompt now defaults to Yes (June 2026, CLI v0.28.x), but the non-interactive default is still non-moddable; Session 02 testers (Will, others) had hit `--moddable requires a GitHub origin` and been stopped from deploying.
 
 ## Moddable default flow
 
-`playground deploy --playground` should default to moddable. Current code defaults non-moddable — Session 02 testers hit `--moddable requires a GitHub origin` and were blocked from deploying. The spec-level intent is to read an existing public GitHub origin, deploy moddable automatically, and prompt only if missing. **The CLI itself never invokes `gh`** (see invariants above) — that's the playground-app's job, not the CLI's. Non-moddable apps still get DotNS + Bulletin links; they just can't be cloned.
+`playground deploy --playground` should default to moddable. **Partial fix landed (June 2026, CLI v0.28.x):** the interactive prompt cursor now defaults to Yes. The non-interactive default (the `--no-moddable` behaviour in `src/commands/deploy/index.ts`) is still non-moddable — the full flip (#24) is pending. The spec intent is to read an existing public GitHub origin, deploy moddable automatically, and prompt only if missing. **The CLI itself never invokes `gh`** (see invariants above) — that's the playground-app's job, not the CLI's. Non-moddable apps still get DotNS + Bulletin links; they just can't be cloned.
 
 ## quests.json (tutorial only)
 
@@ -353,7 +353,7 @@ The tutorial repo also ships `setup.sh` + `.claude/skills/`. Generic Product SDK
 - `playground init` — first-time setup, QR auth, session key, dependency install (login + toolchain run concurrently), funding, account mapping, Bulletin allowance, optional playground username claim. Alice grants 1000 tx / 100MB. Alice sends 10 PAS if balance < 1 PAS. `Revive.map_account` signed by user.
 - `playground mod` — HTTPS tarball via `codeload.github.com`, interactive picker over moddable apps, source-domain capture, moddable preflight check.
 - `playground build` — auto-detect Rust/Solidity/EVM + frontend, picks the package manager.
-- `playground deploy --playground` — full 5-step pipeline. Flags: `--signer dev|phone`, `--domain`, `--buildDir`, `--no-build`, `--playground`, `--private`, `--moddable`/`--no-moddable`, `--suri`, `--env` (defaults to `paseo-next-v2`).
+- `playground deploy --playground` — full 5-step pipeline. Flags: `--signer dev|phone`, `--domain`, `--buildDir`, `--no-build`, `--playground`, `--private`, `--moddable`/`--no-moddable`, `--suri`, `--env` (defaults to `paseo-next-v2`). Deploy-time metadata prompt (#203) supports tags but is unpolished (June 2026) — name/description/README prompting still pending.
 - `playground contract` — contract install + deploy.
 - `playground decentralise <url>` (CLI v0.26.0+) — point at a live static site URL (e.g. a GitHub Pages page), get back a `.dot` URL hosted on Bulletin. Interactive TUI: URL → signer → name → publish to Bulletin + .dot. Optional `--playground` flag also publishes to the playground registry. Powers the IslandPortal "Launch your first .dot site" quest on the Playground tab. Note: spelling is `decentralise` (British, matches spec); some earlier code references `decentralize`.
 - `playground logout`, `playground update` (self-update from GitHub releases).
