@@ -54,13 +54,17 @@ const SLOT_SIGNER = { publicKey: PUBLIC_KEY } as any;
 
 const ENV_HINT = /playground login/;
 
-// The Bulletin authorization check reads the live chain height (to evaluate
-// expiry) directly off the typed API. `checkAuthorization` is mocked, but the
-// block read goes through `bulletinApi.query.System.Number`, so the api stub
-// must carry that path. Default height is 0, so any positive `expiration`
-// counts as "not expired".
-function bulletinApiAtBlock(block = 0): any {
-    return { query: { System: { Number: { getValue: async () => block } } } };
+// Usability is decided by the chain's `BulletinTransactionStorageApi::can_store`
+// runtime predicate (a 1-byte probe = exists + unexpired), reached through
+// `bulletinApi.apis.BulletinTransactionStorageApi.can_store`. `checkAuthorization`
+// is mocked separately and only feeds the expired-vs-never-authorized error
+// message, so the api stub just needs to carry the can_store verdict.
+function bulletinApiCanStore(verdict = true): any {
+    return {
+        apis: {
+            BulletinTransactionStorageApi: { can_store: vi.fn(async () => verdict) },
+        },
+    };
 }
 
 // An authorization that exists and has not expired (the only thing that gates
@@ -71,6 +75,16 @@ const ACTIVE_EXHAUSTED = {
     remainingTransactions: 0,
     remainingBytes: 0n,
     expiration: 100,
+};
+
+// An authorization that exists on-chain but is past its expiry — the chain's
+// can_store returns false for it, while `authorized` stays true so the error
+// path reports "has expired" rather than "not authorized".
+const EXPIRED = {
+    authorized: true,
+    remainingTransactions: 5,
+    remainingBytes: 1000n,
+    expiration: 10,
 };
 
 function sessionSigner(): ResolvedSigner {
@@ -124,13 +138,13 @@ describe("getBulletinAllowanceSigner", () => {
         ).rejects.toThrow(ENV_HINT);
     });
 
-    it("returns the slot signer when its authorization exists and is not expired", async () => {
+    it("returns the slot signer when can_store accepts (exists + not expired)", async () => {
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
         checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: bulletinApiAtBlock(50),
+            bulletinApi: bulletinApiCanStore(true),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
@@ -138,13 +152,14 @@ describe("getBulletinAllowanceSigner", () => {
 
     it("returns the slot signer even when the tx/byte quota counters are exhausted (soft limits)", async () => {
         // The whole point of dropping the quota gate: an authorized, unexpired
-        // slot with zeroed counters still stores fine, so no Increase, no throw.
+        // slot with zeroed counters still stores fine (can_store=true), so no
+        // Increase, no throw.
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
         checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: bulletinApiAtBlock(50),
+            bulletinApi: bulletinApiCanStore(true),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
@@ -161,19 +176,14 @@ describe("getBulletinAllowanceSigner", () => {
         expect(checkAuthorizationMock).not.toHaveBeenCalled();
     });
 
-    it("throws the expired error when the slot authorization is past its expiration block", async () => {
+    it("throws the expired error when can_store rejects an authorized slot", async () => {
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 5,
-            remainingBytes: 1000n,
-            expiration: 10,
-        });
+        checkAuthorizationMock.mockResolvedValue(EXPIRED);
 
         await expect(
             getBulletinAllowanceSigner({
                 publishSigner: sessionSigner(),
-                bulletinApi: bulletinApiAtBlock(20), // now (20) >= expiration (10) ⇒ expired
+                bulletinApi: bulletinApiCanStore(false), // chain rejects: expired
             }),
         ).rejects.toThrow(/has expired/);
     });
@@ -190,7 +200,7 @@ describe("getBulletinAllowanceSigner", () => {
         await expect(
             getBulletinAllowanceSigner({
                 publishSigner: sessionSigner(),
-                bulletinApi: bulletinApiAtBlock(0),
+                bulletinApi: bulletinApiCanStore(false),
             }),
         ).rejects.toThrow(/not authorized on-chain yet/);
     });
@@ -204,7 +214,7 @@ describe("getBulletinAllowanceSigner", () => {
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: bulletinApiAtBlock(50),
+            bulletinApi: bulletinApiCanStore(true),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
@@ -241,7 +251,7 @@ describe("getBulletinAllowanceSigner — phone approval prompts", () => {
 
         await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: bulletinApiAtBlock(50),
+            bulletinApi: bulletinApiCanStore(true),
             onPrompt: prompt,
         });
 
@@ -282,7 +292,7 @@ describe("getBulletinAllowanceSigner — SDK signer passthrough", () => {
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: bulletinApiAtBlock(50),
+            bulletinApi: bulletinApiCanStore(true),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
@@ -320,7 +330,7 @@ describe("getCachedBulletinAllowanceSigner", () => {
 
         const signer = await getCachedBulletinAllowanceSigner({
             publishSigner: sessionSigner(),
-            bulletinApi: bulletinApiAtBlock(50),
+            bulletinApi: bulletinApiCanStore(true),
         });
 
         expect(signer).toBe(SLOT_SIGNER);
@@ -329,17 +339,12 @@ describe("getCachedBulletinAllowanceSigner", () => {
 
     it("throws the expired error without requesting an allocation", async () => {
         createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 5,
-            remainingBytes: 1000n,
-            expiration: 10,
-        });
+        checkAuthorizationMock.mockResolvedValue(EXPIRED);
 
         await expect(
             getCachedBulletinAllowanceSigner({
                 publishSigner: sessionSigner(),
-                bulletinApi: bulletinApiAtBlock(20),
+                bulletinApi: bulletinApiCanStore(false),
             }),
         ).rejects.toThrow(/has expired/);
 
@@ -351,7 +356,7 @@ describe("cachedBulletinSlotAuthorization", () => {
     it("returns null on a cache miss without touching the wire", async () => {
         createSlotAccountSignerMock.mockResolvedValue(null);
 
-        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiAtBlock());
+        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiCanStore());
 
         expect(result).toBeNull();
         expect(checkAuthorizationMock).not.toHaveBeenCalled();
@@ -361,21 +366,16 @@ describe("cachedBulletinSlotAuthorization", () => {
         createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
         checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
 
-        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiAtBlock(50));
+        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiCanStore(true));
 
         expect(result?.usable).toBe(true);
     });
 
     it("flags an expired authorization as not usable", async () => {
         createSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
-        checkAuthorizationMock.mockResolvedValue({
-            authorized: true,
-            remainingTransactions: 5,
-            remainingBytes: 1000n,
-            expiration: 10,
-        });
+        checkAuthorizationMock.mockResolvedValue(EXPIRED);
 
-        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiAtBlock(20));
+        const result = await cachedBulletinSlotAuthorization({} as any, bulletinApiCanStore(false));
 
         expect(result?.usable).toBe(false);
     });
@@ -384,7 +384,7 @@ describe("cachedBulletinSlotAuthorization", () => {
 describe("getBulletinSlotAuthorization", () => {
     it("encodes the signer public key and flags an active authorization as usable", async () => {
         checkAuthorizationMock.mockResolvedValue(ACTIVE_EXHAUSTED);
-        const api = bulletinApiAtBlock(50);
+        const api = bulletinApiCanStore(true);
 
         const result = await getBulletinSlotAuthorization(api, SLOT_SIGNER);
 
@@ -401,7 +401,7 @@ describe("getBulletinSlotAuthorization", () => {
             expiration: 0,
         });
 
-        const result = await getBulletinSlotAuthorization(bulletinApiAtBlock(0), SLOT_SIGNER);
+        const result = await getBulletinSlotAuthorization(bulletinApiCanStore(false), SLOT_SIGNER);
 
         expect(result.usable).toBe(false);
     });

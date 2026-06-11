@@ -92,7 +92,9 @@ export interface CachedBulletinAllowanceSignerOptions {
 
 /**
  * Whether a slot's Bulletin authorization will let `TransactionStorage.store`
- * land. The chain's only hard gate is existence + non-expiry: pallet
+ * land, asked directly of the chain via the
+ * `BulletinTransactionStorageApi::can_store` runtime API rather than evaluated
+ * client-side. The chain's only hard gate is existence + non-expiry: pallet
  * transaction-storage's `check_authorization` rejects a store ONLY when the
  * authorization is missing or expired. The `transactions` / `bytes` extent
  * counters are SOFT limits — they saturate upward on each store and feed a
@@ -100,27 +102,32 @@ export interface CachedBulletinAllowanceSignerOptions {
  * caps apply to `renew`, which this CLI never calls). So remaining quota is
  * irrelevant; we never gate on it and never request an `Increase`.
  *
- * Expiry is `now >= expiration` on-chain, so "not expired" is
- * `currentBlock < expiration`. product-sdk's `checkAuthorization` returns the
- * raw `expiration` block and leaves the comparison to callers, hence the
- * separate block read.
+ * `can_store(account, data_len)` folds existence, expiry and the per-call size
+ * bound into one verdict, so we no longer read the chain height or compare
+ * `expiration` ourselves. We probe with a single byte: `data_len === 0` is
+ * rejected outright, and a 1-byte store passes iff the slot is authorized and
+ * unexpired — exactly the gate we want. Mirrors paritytech/bulletin-deploy#693.
  */
-function isAuthorizationActive(status: AuthorizationStatus, currentBlock: number): boolean {
-    return status.authorized && status.expiration > currentBlock;
+interface BulletinRuntimeApi {
+    apis: {
+        BulletinTransactionStorageApi: {
+            can_store(account: string, dataLen: number): Promise<boolean>;
+        };
+    };
 }
 
 /**
- * Current Bulletin chain height, needed to evaluate authorization expiry.
- * `CloudStorageApi` is the descriptor-typed Bulletin API; `System.Number` is
- * present at runtime but outside the nominal `CloudStorageApi` surface, so we
- * reach it through a narrow structural cast (the same shape `checkAuthorization`
- * uses internally for `TransactionStorage.Authorizations`).
+ * `CloudStorageApi` is the descriptor-typed Bulletin API; the
+ * `BulletinTransactionStorageApi` runtime namespace is present at runtime but
+ * outside the nominal `CloudStorageApi` surface (the hand-written
+ * `BulletinTypedApi` has no `apis` member), so we reach it through a narrow
+ * structural cast — the same skew the `asCloudStorageApi` seam absorbs. Drop it
+ * once the SDK surfaces a `canStore` helper.
  */
-async function readBulletinBlockNumber(bulletinApi: CloudStorageApi): Promise<number> {
-    const api = bulletinApi as unknown as {
-        query: { System: { Number: { getValue(): Promise<number | bigint> } } };
-    };
-    return Number(await api.query.System.Number.getValue());
+async function canStore(bulletinApi: CloudStorageApi, address: string): Promise<boolean> {
+    return (
+        bulletinApi as unknown as BulletinRuntimeApi
+    ).apis.BulletinTransactionStorageApi.can_store(address, 1);
 }
 
 function unusableAuthorizationError({ address, status }: BulletinSlotAuthorization): Error {
@@ -143,11 +150,14 @@ export async function getBulletinSlotAuthorization(
     slotSigner: PolkadotSigner,
 ): Promise<BulletinSlotAuthorization> {
     const address = ss58Encode(slotSigner.publicKey);
-    const [status, currentBlock] = await Promise.all([
+    // `status` is read only for the error-message distinction (expired vs never
+    // authorized); the chain's can_store predicate is the source of truth for
+    // whether a store will actually land.
+    const [status, usable] = await Promise.all([
         checkAuthorization(bulletinApi, address),
-        readBulletinBlockNumber(bulletinApi),
+        canStore(bulletinApi, address),
     ]);
-    return { address, status, usable: isAuthorizationActive(status, currentBlock) };
+    return { address, status, usable };
 }
 
 /**
