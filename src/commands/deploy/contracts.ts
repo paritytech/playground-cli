@@ -77,10 +77,9 @@ export async function runContractsBeforeFrontend({
 
     if (deploy.summary.contracts.length === 0) {
         throw new Error(
-            `No deployable smart contracts found in ${projectDir}. ` +
-                "If this app has no contracts, deploy without --contracts " +
-                '(or answer "No" to the contracts question). If it does, ' +
-                "run the deploy from the project directory that contains them.",
+            `No smart contracts found in ${projectDir} — ` +
+                'deploy without --contracts (answer "No" in the prompt), ' +
+                "or run from the directory that contains your contracts.",
         );
     }
 

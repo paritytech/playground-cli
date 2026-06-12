@@ -48,8 +48,19 @@ export function Row({
                         <Mark kind={mark} />
                     </Box>
                 )}
-                <Text>{paddedLabel}</Text>
-                {value !== undefined && <ValueText tone={tone}>{value}</ValueText>}
+                {/* Label and value live in separate boxes: when a long value
+                    wraps, Ink trims the label's trailing pad and the mark's
+                    margin if they share a text run, fusing "label" into
+                    "value" with no space. flexShrink=0 keeps the label
+                    column; the value box absorbs the wrapping. */}
+                <Box flexShrink={0}>
+                    <Text>{paddedLabel}</Text>
+                </Box>
+                {value !== undefined && (
+                    <Box flexGrow={1} flexShrink={1}>
+                        <ValueText tone={tone}>{value}</ValueText>
+                    </Box>
+                )}
             </Box>
             {hint && (
                 <Box paddingLeft={mark ? 4 : 2}>

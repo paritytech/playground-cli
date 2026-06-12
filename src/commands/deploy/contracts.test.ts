@@ -64,7 +64,7 @@ describe("runContractsBeforeFrontend", () => {
                 mode: "dev",
                 userSigner: null,
             }),
-        ).rejects.toThrow(/No deployable smart contracts found in \/tmp\/example-app/);
+        ).rejects.toThrow(/No smart contracts found in \/tmp\/example-app/);
 
         // The install step used to run anyway and die with the cryptic
         // "No library specified and no dependencies found in cdm.json."
