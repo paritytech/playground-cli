@@ -515,12 +515,20 @@ function detectProjectType(rootDir: string): {
     };
 }
 
-function installRequestsFromArgs(libraries: string[], cdmJson: CdmJson): InstallLibraryRequest[] {
+function installRequestsFromArgs(
+    libraries: string[],
+    cdmJson: CdmJson,
+    cdmJsonLocation: string,
+): InstallLibraryRequest[] {
     if (libraries.length > 0) return libraries.map(parseContractInstallLibraryArg);
 
     const deps = cdmJson.dependencies;
     if (!deps || Object.keys(deps).length === 0) {
-        throw new Error("No library specified and no dependencies found in cdm.json.");
+        throw new Error(
+            `No library specified and no dependencies found in cdm.json (looked in ${cdmJsonLocation}). ` +
+                "Pass the libraries to install (e.g. `playground contract install @org/lib`), " +
+                "or run from a contract project whose cdm.json lists dependencies.",
+        );
     }
 
     return Object.entries(deps).map(([library, version]) => ({
@@ -627,7 +635,7 @@ export async function runContractInstall(
     const cdmJson = cdmResult?.cdmJson ?? { dependencies: {}, contracts: {} };
     assertSupportedCdmJson(cdmJson, cdmResult?.cdmJsonPath);
     const target = resolveContractInstallTarget(opts, cdmJson);
-    const requests = installRequestsFromArgs(libraries, cdmJson);
+    const requests = installRequestsFromArgs(libraries, cdmJson, cdmResult?.cdmJsonPath ?? rootDir);
     const useUi = runOptions.useUi ?? true;
 
     let client: Awaited<ReturnType<typeof createCdmAssetHubClient>> | null = null;

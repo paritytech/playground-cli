@@ -75,8 +75,17 @@ export async function runContractsBeforeFrontend({
         throw new Error(formatContractErrors("Contract deploy failed", deploy.summary));
     }
 
+    if (deploy.summary.contracts.length === 0) {
+        throw new Error(
+            `No deployable smart contracts found in ${projectDir}. ` +
+                "If this app has no contracts, deploy without --contracts " +
+                '(or answer "No" to the contracts question). If it does, ' +
+                "run the deploy from the project directory that contains them.",
+        );
+    }
+
     const installedLibraries = installLibrariesFromDeploySummary(deploy.summary);
-    if (deploy.summary.contracts.length > 0 && installedLibraries.length === 0) {
+    if (installedLibraries.length === 0) {
         throw new Error(
             "Contract deploy completed, but no CDM package names were registered. " +
                 'Add [package.metadata.cdm] package = "@org/name" to each deployable Cargo.toml.',

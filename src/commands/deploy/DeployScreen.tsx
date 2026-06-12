@@ -1130,7 +1130,11 @@ function RunningStage({
             } catch (err) {
                 if (!cancelled) {
                     const message = err instanceof Error ? err.message : String(err);
-                    if (runningContracts) contractDeployAdapter.signingError ??= message;
+                    // Genuine signing failures already set the adapter's
+                    // signingError via the sign-error event before the throw
+                    // lands here; stuffing every contracts-phase error into it
+                    // rendered unrelated failures under a "Signing Failed"
+                    // banner (#319). onError still surfaces the message.
                     setShowPhoneNotice(false);
                     onError(message);
                 }

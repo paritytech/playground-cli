@@ -14,8 +14,13 @@
 // limitations under the License.
 
 import type { DeploySummary } from "@parity/cdm-builder";
-import { describe, expect, it } from "vitest";
-import { installLibrariesFromDeploySummary } from "./contracts.js";
+import { describe, expect, it, vi } from "vitest";
+import { installLibrariesFromDeploySummary, runContractsBeforeFrontend } from "./contracts.js";
+
+vi.mock("../contract.js", () => ({
+    runContractDeploy: vi.fn(),
+    runContractInstall: vi.fn(),
+}));
 
 describe("installLibrariesFromDeploySummary", () => {
     it("deduplicates successful CDM packages and skips failed contracts", () => {
@@ -42,5 +47,27 @@ describe("installLibrariesFromDeploySummary", () => {
         };
 
         expect(installLibrariesFromDeploySummary(summary)).toEqual(["@example/counter"]);
+    });
+});
+
+describe("runContractsBeforeFrontend", () => {
+    it("fails with an actionable error when the project has no contracts (#319)", async () => {
+        const { runContractDeploy, runContractInstall } = await import("../contract.js");
+        vi.mocked(runContractDeploy).mockResolvedValue({
+            summary: { totalDurationMs: 0, contracts: [] },
+            success: true,
+        });
+
+        await expect(
+            runContractsBeforeFrontend({
+                projectDir: "/tmp/example-app",
+                mode: "dev",
+                userSigner: null,
+            }),
+        ).rejects.toThrow(/No deployable smart contracts found in \/tmp\/example-app/);
+
+        // The install step used to run anyway and die with the cryptic
+        // "No library specified and no dependencies found in cdm.json."
+        expect(vi.mocked(runContractInstall)).not.toHaveBeenCalled();
     });
 });
