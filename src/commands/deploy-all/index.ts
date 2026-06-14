@@ -53,6 +53,7 @@ import {
     ENV_FLAG_CHOICES,
     type Env,
     resolveLegacyEnv,
+    setActiveEnv,
 } from "../../config.js";
 import { NO_SESSION_HEADLESS_ERROR } from "../deploy/signerNotice.js";
 import { parseManifest, type ManifestApp } from "./manifest.js";
@@ -114,6 +115,8 @@ export const deployAllCommand = new Command("deploy-all")
 
 async function runDeployAll(opts: DeployAllOpts): Promise<void> {
     const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
+    // Make --env active before any chain access (see deploy/index.ts + config.ts).
+    setActiveEnv(env);
     const mode = opts.signer;
     if (mode !== "dev" && mode !== "phone") {
         throw new Error("deploy-all requires --signer dev or --signer phone.");

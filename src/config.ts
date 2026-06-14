@@ -59,6 +59,29 @@ export const ENV_FLAG_CHOICES: readonly string[] = [...ENV_IDS, ...LEGACY_ENV_AL
 export const ACTIVE_TESTNET_ENV: Env = "paseo-next-v2";
 export const DEFAULT_ENV: Env = ACTIVE_TESTNET_ENV;
 
+/**
+ * Process-wide active environment.
+ *
+ * `--env` is parsed per-command, but the connection singleton (`getConnection`)
+ * and the registry / CDM meta-registry resolution (`liveManager`) read the env
+ * through the *no-arg* `getChainConfig()` default. If a command doesn't make its
+ * chosen env the active one, those paths silently fall back to `DEFAULT_ENV`
+ * (paseo-next-v2) even under `--env summit` — which is exactly how
+ * `deploy --env summit --playground` published the registry entry to Paseo while
+ * storage/DotNS (env threaded explicitly via polkadot-app-deploy) went to Summit.
+ *
+ * A command that accepts `--env` MUST call `setActiveEnv(env)` once, before any
+ * chain access, so every no-arg `getChainConfig()` / `getConnection()` follows it.
+ * When unset (tests, library use) it stays `DEFAULT_ENV` — fully backwards-compatible.
+ */
+let _activeEnv: Env | null = null;
+export function setActiveEnv(env: Env): void {
+    _activeEnv = env;
+}
+export function getActiveEnv(): Env {
+    return _activeEnv ?? DEFAULT_ENV;
+}
+
 export interface ChainConfig {
     /** Env identifier — passes straight through to polkadot-app-deploy's `deploy({ env })`. */
     env: Env;
@@ -155,7 +178,7 @@ export const CONFIGS: Partial<Record<Env, ChainConfig>> = {
     // Other envs are not wired yet — getChainConfig() throws below.
 };
 
-export function getChainConfig(env: Env = DEFAULT_ENV): ChainConfig {
+export function getChainConfig(env: Env = getActiveEnv()): ChainConfig {
     const cfg = CONFIGS[env];
     if (!cfg) {
         throw new Error(
@@ -195,7 +218,7 @@ export function resolveLegacyEnv(input: string): Env {
  * Human-readable network label for the Header bread-crumb. Lower-cased to
  * match the existing visual style ("paseo", "polkadot").
  */
-export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
+export function getNetworkLabel(env: Env = getActiveEnv()): string {
     switch (env) {
         case "paseo-next-v2":
             return "paseo next v2";

@@ -34,10 +34,18 @@
  * be non-empty, so nobody can ship a default whose registry isn't deployed yet.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { loadEnvironments } from "@parity/polkadot-app-deploy";
 import { getRegistryAddress } from "@parity/cdm-env";
-import { CONFIGS, DEFAULT_ENV, type ChainConfig, type Env } from "./config.js";
+import {
+    CONFIGS,
+    DEFAULT_ENV,
+    getActiveEnv,
+    getChainConfig,
+    setActiveEnv,
+    type ChainConfig,
+    type Env,
+} from "./config.js";
 
 const { doc } = await loadEnvironments();
 
@@ -94,5 +102,33 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
         // getRegistryAddress("") / unknown name returns "" — switching the default
         // to an env whose registry isn't deployed yet must fail here, not at runtime.
         expect(getRegistryAddress(cfg!.cdmEnvName)).not.toBe("");
+    });
+});
+
+describe("active env (setActiveEnv / getChainConfig default)", () => {
+    // setActiveEnv mutates process-wide state; reset after each test so other
+    // suites keep the DEFAULT_ENV baseline.
+    afterEach(() => setActiveEnv(DEFAULT_ENV));
+
+    it("defaults to DEFAULT_ENV when unset", () => {
+        expect(getActiveEnv()).toBe(DEFAULT_ENV);
+        expect(getChainConfig().env).toBe(DEFAULT_ENV);
+    });
+
+    it("makes the no-arg getChainConfig() follow the active env", () => {
+        // Regression for the --env summit --playground bug: the registry-publish
+        // leg resolves the chain + CDM meta-registry through the no-arg
+        // getChainConfig() default, so it must follow --env, not DEFAULT_ENV.
+        setActiveEnv("summit");
+        expect(getActiveEnv()).toBe("summit");
+        const cfg = getChainConfig();
+        expect(cfg.env).toBe("summit");
+        expect(cfg.assetHubRpc).toBe(CONFIGS.summit!.assetHubRpc);
+        expect(cfg.cdmEnvName).toBe("w3s");
+    });
+
+    it("does not override an explicitly-passed env", () => {
+        setActiveEnv("summit");
+        expect(getChainConfig("paseo-next-v2").env).toBe("paseo-next-v2");
     });
 });
