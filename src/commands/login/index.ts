@@ -45,6 +45,14 @@ export const loginCommand = new Command("login")
                         login = result.login;
                         console.log("  Scan with the Polkadot mobile app to log in:\n");
                         console.log(result.qrCode);
+                        // Scan-free / single-device fallback: the QR just encodes
+                        // this deeplink. Printing it lets a user paste or tap it on
+                        // the same phone (e.g. when the terminal runs in a mobile
+                        // browser) instead of scanning. Wrapped as an OSC 8
+                        // hyperlink so capable terminals render it tappable.
+                        const hyperlink = (url: string) => `\x1b]8;;${url}\x07${url}\x1b]8;;\x07`;
+                        console.log("\n  …or open this link on the same phone to log in (no scan):\n");
+                        console.log(`  ${hyperlink(result.link)}`);
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
