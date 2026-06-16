@@ -43,16 +43,19 @@ export const loginCommand = new Command("login")
                         existingAddresses = result.addresses;
                     } else {
                         login = result.login;
-                        console.log("  Scan with the Polkadot mobile app to log in:\n");
-                        console.log(result.qrCode);
-                        // Scan-free / single-device fallback: the QR just encodes
-                        // this deeplink. Printing it lets a user paste or tap it on
-                        // the same phone (e.g. when the terminal runs in a mobile
-                        // browser) instead of scanning. Wrapped as an OSC 8
-                        // hyperlink so capable terminals render it tappable.
-                        const hyperlink = (url: string) => `\x1b]8;;${url}\x07${url}\x1b]8;;\x07`;
-                        console.log("\n  …or open this link on the same phone to log in (no scan):\n");
-                        console.log(`  ${hyperlink(result.link)}`);
+                        console.log("  Tap the code to log in, or scan it from another device:\n");
+                        // The QR itself is an OSC 8 hyperlink to the pairing deeplink
+                        // (id= so the link spans the QR's lines). On a separate device
+                        // you scan it; on the same device (e.g. a terminal in a mobile
+                        // browser, where you can't scan a code on your own screen) you
+                        // tap it to open the Polkadot app — the whole code is a big
+                        // tap target, no link to copy.
+                        const linked = (url: string, text: string) =>
+                            `\x1b]8;id=pglogin;${url}\x07${text}\x1b]8;;\x07`;
+                        console.log(linked(result.link, result.qrCode));
+                        // Plain link as a fallback: terminals without OSC 8 click
+                        // support, or to open on another device.
+                        console.log(`\n  (or open: ${result.link} )`);
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
