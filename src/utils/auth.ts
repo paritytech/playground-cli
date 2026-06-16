@@ -197,7 +197,7 @@ function sessionLogoutAddress(session: UserSession): string {
 
 export type ConnectResult =
     | { kind: "existing"; address: string; addresses: SessionAddresses }
-    | { kind: "qr"; qrCode: string; login: LoginHandle };
+    | { kind: "qr"; qrCode: string; link: string; login: LoginHandle };
 
 export type LoginStatus =
     | { step: "waiting" }
@@ -275,15 +275,18 @@ export async function connect(): Promise<ConnectResult> {
 
     // Wait for the QR payload (with timeout)
     try {
-        const qrCode = await Promise.race([
-            new Promise<string>((resolve) => {
+        const { qrCode, link } = await Promise.race([
+            new Promise<{ qrCode: string; link: string }>((resolve) => {
                 let done = false;
                 let unsub: (() => void) | undefined;
                 unsub = adapter.sso.pairingStatus.subscribe(async (status: PairingStatus) => {
                     if (status.step === "pairing" && !done) {
                         done = true;
                         unsub?.();
-                        resolve(await renderQrCode(status.payload));
+                        // `status.payload` is the pairing deeplink
+                        // (polkadotapp://pair?handshake=…); expose it raw so the
+                        // command layer can offer a scan-free, single-device login.
+                        resolve({ qrCode: await renderQrCode(status.payload), link: status.payload });
                     }
                 });
             }),
@@ -302,7 +305,7 @@ export async function connect(): Promise<ConnectResult> {
             ),
         ]);
 
-        return { kind: "qr", qrCode, login: { adapter, authPromise } };
+        return { kind: "qr", qrCode, link, login: { adapter, authPromise } };
     } catch (err) {
         // Release the WebSocket so we don't leak on the error path. SDK's
         // destroy() returns Promise<void>; `.catch()` swallows the

@@ -45,6 +45,18 @@ export const loginCommand = new Command("login")
                         login = result.login;
                         console.log("  Scan with the Polkadot mobile app to log in:\n");
                         console.log(result.qrCode);
+                        // On the same device as the app (e.g. a browser terminal on a
+                        // phone) you can't scan a QR on your own screen, so also print
+                        // a link. Browser terminals (ttyd/xterm.js) only make http(s)
+                        // tappable — not custom schemes — so when PG_LOGIN_LINK_BASE is
+                        // set, print an https link that redirects to the deeplink;
+                        // otherwise print the raw polkadotapp:// deeplink.
+                        const linkBase = process.env.PG_LOGIN_LINK_BASE?.replace(/\/+$/, "");
+                        const openUrl = linkBase
+                            ? `${linkBase}/?d=${encodeURIComponent(result.link)}`
+                            : result.link;
+                        console.log("\n  or open this link to log in on this device:\n");
+                        console.log(`  ${openUrl}\n`);
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
