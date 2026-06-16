@@ -53,9 +53,16 @@ export const loginCommand = new Command("login")
                         const linked = (url: string, text: string) =>
                             `\x1b]8;id=pglogin;${url}\x07${text}\x1b]8;;\x07`;
                         console.log(linked(result.link, result.qrCode));
-                        // Plain link as a fallback: terminals without OSC 8 click
-                        // support, or to open on another device.
-                        console.log(`\n  (or open: ${result.link} )`);
+                        // Most browser terminals (e.g. ttyd) only make http(s) URLs
+                        // tappable — not OSC 8 hyperlinks or custom schemes. So when
+                        // PG_LOGIN_LINK_BASE is set, print an https link that
+                        // redirects to the deeplink; it's tappable on a phone where
+                        // the QR can't be scanned. Otherwise print the raw deeplink.
+                        const linkBase = process.env.PG_LOGIN_LINK_BASE?.replace(/\/+$/, "");
+                        const openUrl = linkBase
+                            ? `${linkBase}/?d=${encodeURIComponent(result.link)}`
+                            : result.link;
+                        console.log(`\n  or open: ${openUrl}\n`);
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
