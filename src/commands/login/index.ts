@@ -43,8 +43,26 @@ export const loginCommand = new Command("login")
                         existingAddresses = result.addresses;
                     } else {
                         login = result.login;
-                        console.log("  Scan with the Polkadot mobile app to log in:\n");
-                        console.log(result.qrCode);
+                        console.log("  Tap the code to log in, or scan it from another device:\n");
+                        // The QR itself is an OSC 8 hyperlink to the pairing deeplink
+                        // (id= so the link spans the QR's lines). On a separate device
+                        // you scan it; on the same device (e.g. a terminal in a mobile
+                        // browser, where you can't scan a code on your own screen) you
+                        // tap it to open the Polkadot app — the whole code is a big
+                        // tap target, no link to copy.
+                        const linked = (url: string, text: string) =>
+                            `\x1b]8;id=pglogin;${url}\x07${text}\x1b]8;;\x07`;
+                        console.log(linked(result.link, result.qrCode));
+                        // Most browser terminals (e.g. ttyd) only make http(s) URLs
+                        // tappable — not OSC 8 hyperlinks or custom schemes. So when
+                        // PG_LOGIN_LINK_BASE is set, print an https link that
+                        // redirects to the deeplink; it's tappable on a phone where
+                        // the QR can't be scanned. Otherwise print the raw deeplink.
+                        const linkBase = process.env.PG_LOGIN_LINK_BASE?.replace(/\/+$/, "");
+                        const openUrl = linkBase
+                            ? `${linkBase}/?d=${encodeURIComponent(result.link)}`
+                            : result.link;
+                        console.log(`\n  or open: ${openUrl}\n`);
                     }
                 } catch (err) {
                     const msg = errorMessage(err);
