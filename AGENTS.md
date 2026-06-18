@@ -122,7 +122,9 @@ the Parity Apache-2.0 block (SPDX line + Parity copyright line, both required) �
 - `getSessionSigner()` returns an adapter that keeps the Node event loop alive. Every caller must
   call the returned `destroy()`.
 - The memory watchdog is ON by default for every command and is the only guard that survives
-  event-loop starvation — do not opt a command out.
+  event-loop starvation — do not opt a command out. The default kill cap is 8 GB and can be
+  overridden with `DOT_MEMORY_LIMIT_GB`; use `DOT_MEMORY_LIMIT_GB=0` only as an intentional
+  emergency bypass for a known-large deploy.
 - New long-running commands should register cleanup through the process guard
   (`src/utils/process-guard.ts`).
 - TUI info updates must be throttled or coalesced. Do not stream raw high-volume logs directly into

@@ -52,7 +52,7 @@
 import { Worker } from "node:worker_threads";
 
 /**
- * Maximum RSS we're willing to tolerate before aborting the deploy. A
+ * Default RSS we're willing to tolerate before aborting the deploy. A
  * legitimate deploy loads polkadot-api runtime metadata for three chains,
  * holds the app CAR bytes + chunk buffers in memory, runs Ink + yoga WASM
  * on top of Bun's compiled-binary JSC heap. On Apple Silicon with a Bun SEA
@@ -60,8 +60,15 @@ import { Worker } from "node:worker_threads";
  * baseline + metadata loading. We keep the absolute cap generous so we
  * don't false-abort on a legit spike; any leak worthy of the name will
  * climb past this quickly enough.
+ *
+ * `DOT_MEMORY_LIMIT_GB` can raise/lower the cap for diagnosis. Set it to
+ * `0`, `false`, `off`, or `disabled` to disable the kill threshold entirely
+ * for a known-large deploy. `DOT_MEMORY_TRACE=1` still streams samples when
+ * the threshold is disabled.
  */
-const MEMORY_LIMIT_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB
+const DEFAULT_MEMORY_LIMIT_BYTES = 8 * 1024 * 1024 * 1024; // 8 GB
+const MEMORY_LIMIT_ENV = "DOT_MEMORY_LIMIT_GB";
+const DISABLED_MEMORY_LIMIT_VALUES = new Set(["0", "false", "off", "disabled"]);
 
 /**
  * How often the worker samples memory. 1 s is cheap now that sampling is
@@ -72,6 +79,27 @@ const MEMORY_POLL_MS = 1000;
 
 /** Grace period after the main flow returns before we force-exit. */
 const HARD_EXIT_GRACE_MS = 2000;
+
+export function resolveMemoryWatchdogLimitBytes(
+    rawLimitGb = process.env[MEMORY_LIMIT_ENV],
+): number | null {
+    if (rawLimitGb === undefined || rawLimitGb.trim() === "") {
+        return DEFAULT_MEMORY_LIMIT_BYTES;
+    }
+
+    const normalized = rawLimitGb.trim().toLowerCase();
+    if (DISABLED_MEMORY_LIMIT_VALUES.has(normalized)) {
+        return null;
+    }
+
+    const limitGb = Number(normalized);
+    if (!Number.isFinite(limitGb) || limitGb <= 0) {
+        return DEFAULT_MEMORY_LIMIT_BYTES;
+    }
+
+    const bytes = Math.floor(limitGb * 1024 * 1024 * 1024);
+    return bytes > 0 ? bytes : DEFAULT_MEMORY_LIMIT_BYTES;
+}
 
 export type CleanupHook = () => void | Promise<void>;
 
@@ -257,8 +285,8 @@ export function scheduleHardExit(exitCode: number): void {
  *
  * If the cap is crossed we SIGKILL `process.pid` — which is the containing
  * process's PID in a worker — and both threads die. We deliberately don't
- * try to run cleanup: if the event loop is starved enough to hit 4 GB,
- * cleanup hooks won't fire on the main thread anyway, and leaving the
+ * try to run cleanup: if the event loop is starved enough to climb past the
+ * cap, cleanup hooks won't fire on the main thread anyway, and leaving the
  * machine swappy is the worse failure mode.
  */
 const WATCHDOG_WORKER_SOURCE = `
@@ -300,12 +328,13 @@ const interval = setInterval(() => {
     );
   }
 
-  if (mem.rss > limit) {
+  if (typeof limit === 'number' && mem.rss > limit) {
     writeStderr(
       '\\n\\u2716 Memory use exceeded ' + fmt(limit) +
       ' (RSS \\u2248 ' + fmt(mem.rss) + '). Watchdog killing process.\\n' +
       'This is almost certainly a leaked subscription or runaway retry loop. ' +
-      'Re-run with DOT_MEMORY_TRACE=1 DOT_DEPLOY_VERBOSE=1 to capture the timeline.\\n'
+      'Re-run with DOT_MEMORY_TRACE=1 DOT_DEPLOY_VERBOSE=1 to capture the timeline, ' +
+      'or set DOT_MEMORY_LIMIT_GB=0 to bypass the cap for a known-large deploy.\\n'
     );
     // SIGKILL the whole process. process.pid from a worker is the host
     // process PID, so this takes down the main thread too.
@@ -331,10 +360,15 @@ parentPort.on('message', (msg) => {
  */
 export function startMemoryWatchdog(): () => void {
     const trace = process.env.DOT_MEMORY_TRACE === "1";
+    const limit = resolveMemoryWatchdogLimitBytes();
+    if (limit === null && !trace) {
+        return () => {};
+    }
+
     const worker = new Worker(WATCHDOG_WORKER_SOURCE, {
         eval: true,
         workerData: {
-            limit: MEMORY_LIMIT_BYTES,
+            limit,
             pollMs: MEMORY_POLL_MS,
             trace,
         },

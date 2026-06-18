@@ -14,7 +14,11 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import { isBenignUnsubscriptionError, setProcessGuardWarningHandler } from "./process-guard.js";
+import {
+    isBenignUnsubscriptionError,
+    resolveMemoryWatchdogLimitBytes,
+    setProcessGuardWarningHandler,
+} from "./process-guard.js";
 
 // Construct an object shaped like rxjs's `UnsubscriptionError` — rxjs builds
 // it via `createErrorClass`, so in practice all we rely on is (a) `name ===
@@ -127,5 +131,31 @@ describe("process guard warning handler", () => {
             throw new Error("telemetry failed");
         });
         expect(() => setProcessGuardWarningHandler(undefined)).not.toThrow();
+    });
+});
+
+describe("resolveMemoryWatchdogLimitBytes", () => {
+    const gib = 1024 * 1024 * 1024;
+
+    it("defaults to 8 GiB", () => {
+        expect(resolveMemoryWatchdogLimitBytes(undefined)).toBe(8 * gib);
+        expect(resolveMemoryWatchdogLimitBytes("   ")).toBe(8 * gib);
+    });
+
+    it("accepts positive GiB values", () => {
+        expect(resolveMemoryWatchdogLimitBytes("12")).toBe(12 * gib);
+        expect(resolveMemoryWatchdogLimitBytes("0.5")).toBe(0.5 * gib);
+    });
+
+    it("disables the kill threshold with explicit off values", () => {
+        expect(resolveMemoryWatchdogLimitBytes("0")).toBeNull();
+        expect(resolveMemoryWatchdogLimitBytes("false")).toBeNull();
+        expect(resolveMemoryWatchdogLimitBytes("OFF")).toBeNull();
+        expect(resolveMemoryWatchdogLimitBytes("disabled")).toBeNull();
+    });
+
+    it("falls back to the default for invalid values", () => {
+        expect(resolveMemoryWatchdogLimitBytes("-1")).toBe(8 * gib);
+        expect(resolveMemoryWatchdogLimitBytes("not-a-number")).toBe(8 * gib);
     });
 });
