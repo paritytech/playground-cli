@@ -168,7 +168,22 @@ export const CONFIGS: Partial<Record<Env, ChainConfig>> = {
     // Other envs are not wired yet — getChainConfig() throws below.
 };
 
-export function getChainConfig(env: Env = DEFAULT_ENV): ChainConfig {
+/**
+ * Active env resolved at runtime from the `PLAYGROUND_ENV` environment variable
+ * (validated against `CONFIGS`), falling back to the build-time `DEFAULT_ENV`.
+ *
+ * This is the runtime counterpart to the build-time `ACTIVE_TESTNET_ENV` switch:
+ * because the direct-chain layer (`getConnection`, pairing, registry, drip) and
+ * the display helpers below all default to this, setting `PLAYGROUND_ENV` points
+ * a single build's own reads at a different wired network — no rebuild, no flip.
+ * Unset / unknown value ⇒ `DEFAULT_ENV`, so existing callers are unaffected.
+ */
+export function getActiveEnv(): Env {
+    const fromEnv = process.env.PLAYGROUND_ENV?.trim() as Env | undefined;
+    return fromEnv && CONFIGS[fromEnv] ? fromEnv : DEFAULT_ENV;
+}
+
+export function getChainConfig(env: Env = getActiveEnv()): ChainConfig {
     const cfg = CONFIGS[env];
     if (!cfg) {
         throw new Error(
@@ -208,7 +223,7 @@ export function resolveLegacyEnv(input: string): Env {
  * Human-readable network label for the Header bread-crumb. Lower-cased to
  * match the existing visual style ("paseo", "polkadot").
  */
-export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
+export function getNetworkLabel(env: Env = getActiveEnv()): string {
     switch (env) {
         case "paseo-next-v2":
             return "paseo next v2";
@@ -230,9 +245,9 @@ export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
 /**
  * Native token symbol for the given env (defaults to the active env). Display
  * only — drives balance/drip labels via `formatPas`. Flipping
- * `ACTIVE_TESTNET_ENV` (e.g. to `"summit"`) re-labels everything from here.
+ * `ACTIVE_TESTNET_ENV` (or setting `PLAYGROUND_ENV`) re-labels everything here.
  */
-export function getTokenSymbol(env: Env = DEFAULT_ENV): string {
+export function getTokenSymbol(env: Env = getActiveEnv()): string {
     return getChainConfig(env).tokenSymbol;
 }
 
@@ -241,7 +256,7 @@ export function getTokenSymbol(env: Env = DEFAULT_ENV): string {
  * Display only — used by `playground status` to read the product account's PGAS
  * balance. See `ChainConfig.pgasAssetId`.
  */
-export function getPgasAssetId(env: Env = DEFAULT_ENV): number {
+export function getPgasAssetId(env: Env = getActiveEnv()): number {
     return getChainConfig(env).pgasAssetId;
 }
 

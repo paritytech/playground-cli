@@ -34,10 +34,20 @@
  * be non-empty, so nobody can ship a default whose registry isn't deployed yet.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { loadEnvironments } from "@parity/polkadot-app-deploy";
 import { getRegistryAddress } from "@parity/cdm-env";
-import { CONFIGS, DEFAULT_ENV, getPgasAssetId, type ChainConfig, type Env } from "./config.js";
+import {
+    CONFIGS,
+    DEFAULT_ENV,
+    getActiveEnv,
+    getChainConfig,
+    getNetworkLabel,
+    getPgasAssetId,
+    getTokenSymbol,
+    type ChainConfig,
+    type Env,
+} from "./config.js";
 
 const { doc } = await loadEnvironments();
 
@@ -49,6 +59,41 @@ describe("getPgasAssetId", () => {
     it("returns a number for every wired env", () => {
         expect(typeof getPgasAssetId("paseo-next-v2")).toBe("number");
         expect(typeof getPgasAssetId("summit")).toBe("number");
+    });
+});
+
+describe("getActiveEnv (PLAYGROUND_ENV runtime override)", () => {
+    const original = process.env.PLAYGROUND_ENV;
+    afterEach(() => {
+        if (original === undefined) delete process.env.PLAYGROUND_ENV;
+        else process.env.PLAYGROUND_ENV = original;
+    });
+
+    it("falls back to DEFAULT_ENV when PLAYGROUND_ENV is unset", () => {
+        delete process.env.PLAYGROUND_ENV;
+        expect(getActiveEnv()).toBe(DEFAULT_ENV);
+    });
+
+    it("uses a wired PLAYGROUND_ENV value", () => {
+        process.env.PLAYGROUND_ENV = "summit";
+        expect(getActiveEnv()).toBe("summit");
+    });
+
+    it("trims surrounding whitespace", () => {
+        process.env.PLAYGROUND_ENV = "  summit  ";
+        expect(getActiveEnv()).toBe("summit");
+    });
+
+    it("falls back to DEFAULT_ENV for an unwired/garbage value", () => {
+        process.env.PLAYGROUND_ENV = "not-a-real-env";
+        expect(getActiveEnv()).toBe(DEFAULT_ENV);
+    });
+
+    it("threads through the no-arg config + display helpers", () => {
+        process.env.PLAYGROUND_ENV = "summit";
+        expect(getChainConfig().env).toBe("summit");
+        expect(getTokenSymbol()).toBe("SUM");
+        expect(getNetworkLabel()).toBe("summit");
     });
 });
 
