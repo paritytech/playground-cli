@@ -62,6 +62,7 @@ import {
 import { getAssetHubDescriptor, getBulletinDescriptor } from "../utils/descriptors.js";
 import { onProcessShutdown } from "../utils/process-guard.js";
 import { resolveSigner, type ResolvedSigner, type SignerOptions } from "../utils/signer.js";
+import { remapCargoMetadataError } from "../utils/toolchain.js";
 import { runContractDeployWithUI } from "./contractDeployUi.js";
 import { runContractInstallWithUI } from "./contractInstallUi.js";
 
@@ -296,7 +297,12 @@ async function assertCdmPackageOwnership({
     registryAddress: HexString;
     origin: SS58String;
 }): Promise<void> {
-    const detected = detectBuildOrder(rootDir);
+    let detected: ReturnType<typeof detectBuildOrder>;
+    try {
+        detected = detectBuildOrder(rootDir);
+    } catch (err) {
+        throw remapCargoMetadataError(err);
+    }
     const packageNames = [
         ...new Set(
             detected.contracts

@@ -14,7 +14,15 @@
 // limitations under the License.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hasCargoPvmContract, isIpfsMigrationError, prependPath, TOOL_STEPS } from "./toolchain.js";
+import {
+    CARGO_METADATA_MESSAGE,
+    hasCargoPvmContract,
+    isCargoMetadataError,
+    isIpfsMigrationError,
+    prependPath,
+    remapCargoMetadataError,
+    TOOL_STEPS,
+} from "./toolchain.js";
 
 describe("prependPath", () => {
     let originalPath: string | undefined;
@@ -155,5 +163,47 @@ describe("isIpfsMigrationError", () => {
         // "needs migration" from some other dependency must not be remapped
         // to the IPFS instruction.
         expect(isIpfsMigrationError(new Error("database needs migration"))).toBe(false);
+    });
+});
+
+describe("cargo metadata error remap (#396)", () => {
+    // The shape cdm-builder's getCargoMetadata rethrows: execSync's bare
+    // "Command failed: cargo metadata …" with cargo's stderr appended.
+    const raw = new Error(
+        'Command failed: cargo metadata --format-version 1 --manifest-path "/p/Cargo.toml" --no-deps\n' +
+            "error: key with no value, expected `=`\n",
+    );
+
+    it("classifies cdm-builder's raw cargo metadata failure", () => {
+        expect(isCargoMetadataError(raw)).toBe(true);
+    });
+
+    it("remaps to the actionable message while keeping cargo's own diagnostic", () => {
+        const remapped = remapCargoMetadataError(raw) as Error;
+        expect(remapped).toBeInstanceOf(Error);
+        expect(remapped.message.startsWith(CARGO_METADATA_MESSAGE)).toBe(true);
+        // Must NOT drop cargo's specifics, or a malformed Cargo.toml loses the
+        // detail that lets the user fix it.
+        expect(remapped.message).toContain("key with no value");
+        // The raw error stays reachable for diagnostics — wrap, never discard.
+        expect(remapped.cause).toBe(raw);
+    });
+
+    it("surfaces cargo's clean stderr over the noisy 'Command failed' echo", () => {
+        // execSync puts the clean diagnostic on `.stderr` and the command echo
+        // on `.message`; prefer stderr so the user sees file/line, not the command.
+        const withStderr = Object.assign(
+            new Error('Command failed: cargo metadata --manifest-path "/p/Cargo.toml" --no-deps'),
+            { stderr: "error: key with no value, expected `=`\n --> Cargo.toml:21:6\n" },
+        );
+        const remapped = remapCargoMetadataError(withStderr) as Error;
+        expect(remapped.message).toContain("Cargo.toml:21:6");
+        expect(remapped.message).not.toContain("--manifest-path");
+    });
+
+    it("passes unrelated deploy errors through unchanged", () => {
+        const other = new Error("AncientBirthBlock: chunk rejected");
+        expect(remapCargoMetadataError(other)).toBe(other);
+        expect(isCargoMetadataError(other)).toBe(false);
     });
 });

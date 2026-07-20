@@ -22,6 +22,7 @@ import {
     type DeploySummary,
 } from "@parity/cdm-builder";
 import { getNetworkLabel } from "../config.js";
+import { remapCargoMetadataError } from "../utils/toolchain.js";
 import {
     COLOR,
     Callout,
@@ -124,7 +125,12 @@ export function precomputeContractDeployDisplay(
     rootDir: string,
     contracts: string[] | undefined,
 ): ContractDeployDisplay {
-    const order = detectBuildOrder(rootDir, contracts);
+    let order: ReturnType<typeof detectBuildOrder>;
+    try {
+        order = detectBuildOrder(rootDir, contracts);
+    } catch (err) {
+        throw remapCargoMetadataError(err);
+    }
     const displayNames = new Map<string, string>();
     for (const contract of order.contracts) {
         displayNames.set(
