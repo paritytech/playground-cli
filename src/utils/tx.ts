@@ -14,19 +14,20 @@
 // limitations under the License.
 
 /**
- * Unwrap a `@parity/product-sdk-tx` submit result, throwing on the `err` channel.
+ * Unwrap a product-sdk `Result` (`@parity/result`'s `{ ok, value } | { ok, error }`
+ * tagged union), throwing on the `err` channel.
  *
- * `@parity/product-sdk-tx@0.3` moved `submitAndWatch` (and the batch helpers)
- * from throw-on-failure to returning a `Result<TxResult, TxError>` that NEVER
- * rejects — a dispatch failure, timeout, or signing rejection all arrive on the
- * `err` channel instead. Every CLI call site was written against the old
- * contract, where a rejected promise signals failure (deploy aborts, drip/fund
- * error surfacing, the Invalid-Payment retry loop in `playground.ts`). Re-throw
- * the typed `TxError` here so that control flow is preserved unchanged, and keep
- * the throw semantics in this one place rather than re-deriving `.ok` checks at
- * every call site.
+ * Several product-sdk calls moved from throw-on-failure to returning a `Result`
+ * that NEVER rejects: `@parity/product-sdk-tx@0.3`'s `submitAndWatch` (dispatch
+ * failure / timeout / signing rejection) and `@parity/product-sdk-contracts@0.9`'s
+ * `ContractManager.fromLiveClient`. Every CLI call site was written against the
+ * old contract, where a rejected promise signals failure (deploy aborts,
+ * drip/fund error surfacing, the Invalid-Payment retry loop in `playground.ts`,
+ * the MetaRegistryFailure wrap in `registry.ts`). Re-throw the typed error here
+ * so control flow is preserved unchanged, and keep the throw semantics in this
+ * one place rather than re-deriving `.ok` checks at every call site.
  */
-export function unwrapTx<T>(result: { ok: true; value: T } | { ok: false; error: unknown }): T {
+export function unwrapResult<T>(result: { ok: true; value: T } | { ok: false; error: unknown }): T {
     if (!result.ok) {
         throw result.error instanceof Error ? result.error : new Error(String(result.error));
     }

@@ -38,7 +38,7 @@ import { createClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
 import { calculateCid } from "@parity/product-sdk-cloud-storage";
 import { submitAndWatch, withRetry } from "@parity/product-sdk-tx";
-import { unwrapTx } from "../tx.js";
+import { unwrapResult } from "../tx.js";
 import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
@@ -365,7 +365,7 @@ export async function publishToPlayground(
                 });
                 try {
                     await withRetry(() =>
-                        submitAndWatch(storeTx, storageSigner).then(unwrapTx),
+                        submitAndWatch(storeTx, storageSigner).then(unwrapResult),
                     );
                 } catch (err) {
                     if (!isInvalidPaymentError(err) || options.publishSigner.source !== "session") {
@@ -381,7 +381,7 @@ export async function publishToPlayground(
                         onPrompt: options.onAllowancePrompt,
                     });
                     await withRetry(() =>
-                        submitAndWatch(storeTx, storageSigner).then(unwrapTx),
+                        submitAndWatch(storeTx, storageSigner).then(unwrapResult),
                     );
                 }
                 return cid;
