@@ -31,7 +31,17 @@ const {
 }));
 
 vi.mock("@parity/product-sdk-cloud-storage", () => ({
-    checkAuthorization: checkAuthorizationMock,
+    // cloud-storage@0.8 returns `checkAuthorization` as a `Result`. The status
+    // fixtures below stay bare (they're what the code reads off `.value`), so
+    // wrap them on the `ok` channel here in one place. A test that needs the
+    // err channel (a failed on-chain read) can resolve a `{ ok: false, error }`
+    // Result directly — it is passed through unwrapped.
+    checkAuthorization: async (...args: unknown[]) => {
+        const value = await checkAuthorizationMock(...args);
+        return value && typeof value === "object" && "ok" in value
+            ? value
+            : { ok: true as const, value };
+    },
 }));
 
 vi.mock("@parity/product-sdk-terminal/host", () => ({
@@ -195,12 +205,31 @@ describe("getBulletinAllowanceSigner", () => {
         ).rejects.toThrow(/not authorized on-chain yet/);
     });
 
-    it("degrades to the slot signer when the authorization status cannot be READ (transient error)", async () => {
+    it("degrades to the slot signer when the authorization status cannot be READ (thrown)", async () => {
         // The up-front check is an optimization, not a gate: a transient
         // failure reading on-chain status must NOT abort the deploy with a
         // misleading "re-run login" message — the auth may be perfectly valid.
         ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
         checkAuthorizationMock.mockRejectedValue(new Error("WS halt (3)"));
+
+        const signer = await getBulletinAllowanceSigner({
+            publishSigner: sessionSigner(),
+            bulletinApi: bulletinApiAtBlock(50),
+        });
+
+        expect(signer).toBe(SLOT_SIGNER);
+    });
+
+    it("degrades to the slot signer when checkAuthorization resolves the err channel (cloud-storage@0.8)", async () => {
+        // cloud-storage@0.8 surfaces a failed on-chain read as `err`, NOT a
+        // throw. The failed read must still degrade (proceed with the slot
+        // signer), exactly like the thrown case above — a `Result.err` must not
+        // be conflated with a definitively-unauthorized slot.
+        ensureSlotAccountSignerMock.mockResolvedValue(SLOT_SIGNER);
+        checkAuthorizationMock.mockResolvedValue({
+            ok: false,
+            error: new Error("Authorizations query failed"),
+        });
 
         const signer = await getBulletinAllowanceSigner({
             publishSigner: sessionSigner(),

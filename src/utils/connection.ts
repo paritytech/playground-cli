@@ -31,8 +31,10 @@ import {
 } from "./descriptors.js";
 
 // The public type name remains `PaseoClient` for compatibility with the rest of
-// the codebase, but runtime descriptor selection follows the active env. When
-// DEFAULT_ENV is summit, direct PAPI reads use product-sdk's summit descriptors.
+// the codebase. Since `@parity/product-sdk-descriptors@0.8.0` dropped the
+// non-paseo descriptor subpaths, the descriptor selectors return the paseo
+// descriptor for every env (see `descriptors.ts`); direct PAPI reads touch
+// common pallets only, so that is safe for the single wired env (paseo-next-v2).
 
 type PaseoChains = {
     assetHub: AssetHubDescriptor;

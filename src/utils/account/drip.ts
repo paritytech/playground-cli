@@ -41,6 +41,7 @@
 
 import { Enum } from "polkadot-api";
 import { submitAndWatch } from "@parity/product-sdk-tx";
+import { unwrapTx } from "../tx.js";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import { getNetworkLabel, getTokenSymbol } from "../../config.js";
 import type { PaseoClient } from "../connection.js";
@@ -168,13 +169,15 @@ export async function dripToProductAccount(
         throw new DevFunderExhaustedError(dev.ss58Address, devBalance.data.free, required);
     }
 
-    await submitAndWatch(
-        client.assetHub.tx.Balances.transfer_allow_death({
-            dest: Enum("Id", recipient),
-            value: DRIP_AMOUNT,
-        }),
-        dev.signer,
-        { waitFor: "finalized" },
+    unwrapTx(
+        await submitAndWatch(
+            client.assetHub.tx.Balances.transfer_allow_death({
+                dest: Enum("Id", recipient),
+                value: DRIP_AMOUNT,
+            }),
+            dev.signer,
+            { waitFor: "finalized" },
+        ),
     );
     return { skipped: false, transferred: DRIP_AMOUNT, balance };
 }

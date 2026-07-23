@@ -18,7 +18,7 @@
  *
  * We upload the metadata JSON through Bulletin `TransactionStorage.store`
  * with the product-scoped RFC-0010 Bulletin allowance account, then call
- * `registry.publish(...)` / `registry.publishDev(...)` ourselves via
+ * `registry.publish(...)` (with the `is_dev_signer` flag) ourselves via
  * `getRegistryContract()`.
  * Phone publishing is signed by the user's product account so the contract's
  * `env::caller()` matches their address. Dev publishing is signed by the dev
@@ -38,6 +38,7 @@ import { createClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
 import { calculateCid } from "@parity/product-sdk-cloud-storage";
 import { submitAndWatch, withRetry } from "@parity/product-sdk-tx";
+import { unwrapTx } from "../tx.js";
 import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
@@ -64,7 +65,8 @@ export interface PublishToPlaygroundOptions {
      * Signer that submits the registry publish tx. In phone mode this is the
      * user's session signer and calls `publish(...)` (caller becomes owner).
      * In dev mode this is a dev signer (Alice / `--suri`) and calls
-     * `publishDev(...)`; `claimedOwnerH160` carries the H160 to record as owner.
+     * `publish(...)` with `is_dev_signer: true`; `claimedOwnerH160` carries the
+     * H160 to record as owner.
      */
     publishSigner: ResolvedSigner;
     /**
@@ -130,9 +132,9 @@ export interface PublishToPlaygroundOptions {
     moddedFrom?: string;
     /**
      * True when the publish is signed by the dev signer (Alice / `--suri`)
-     * rather than the user's session. Dev publishes use the ungated
-     * `publishDev(...)` contract path, which records the app without awarding
-     * deploy XP or source-app mod XP.
+     * rather than the user's session. Dev publishes set the ungated
+     * `is_dev_signer` flag on `publish(...)`, which records the app without
+     * awarding deploy XP or source-app mod XP.
      */
     isDevSigner?: boolean;
 }
@@ -362,7 +364,9 @@ export async function publishToPlayground(
                     onPrompt: options.onAllowancePrompt,
                 });
                 try {
-                    await withRetry(() => submitAndWatch(storeTx, storageSigner));
+                    await withRetry(() =>
+                        submitAndWatch(storeTx, storageSigner).then(unwrapTx),
+                    );
                 } catch (err) {
                     if (!isInvalidPaymentError(err) || options.publishSigner.source !== "session") {
                         throw err;
@@ -376,7 +380,9 @@ export async function publishToPlayground(
                         bulletinApi: asCloudStorageApi(bulletinApi),
                         onPrompt: options.onAllowancePrompt,
                     });
-                    await withRetry(() => submitAndWatch(storeTx, storageSigner));
+                    await withRetry(() =>
+                        submitAndWatch(storeTx, storageSigner).then(unwrapTx),
+                    );
                 }
                 return cid;
             } finally {
@@ -415,25 +421,21 @@ export async function publishToPlayground(
                     const moddedFromArg = moddedFrom ?? "";
                     const isModdable = options.isModdable ?? false;
                     const isDevSigner = options.isDevSigner ?? false;
-                    const result = isDevSigner
-                        ? await registry.publishDev.tx(
-                              fullDomain,
-                              metadataCid,
-                              visibility,
-                              owner,
-                              moddedFromArg,
-                              isModdable,
-                          )
-                        : await registry.publish.tx(
-                              fullDomain,
-                              metadataCid,
-                              visibility,
-                              owner,
-                              moddedFromArg,
-                              isModdable,
-                              false,
-                          );
-                    if (result && result.ok === false) {
+                    // contracts@0.9 dropped the separate `publishDev` method:
+                    // the dev-signer path is now the same `publish` call with
+                    // the trailing `is_dev_signer` boolean set. `true` records
+                    // the app without awarding mod XP (the former `publishDev`
+                    // behaviour); `false` is the normal user publish.
+                    const result = await registry.publish.tx(
+                        fullDomain,
+                        metadataCid,
+                        visibility,
+                        owner,
+                        moddedFromArg,
+                        isModdable,
+                        isDevSigner,
+                    );
+                    if (!result.ok) {
                         throw new Error("Registry publish transaction reverted");
                     }
                     return { metadataCid, fullDomain, metadata };

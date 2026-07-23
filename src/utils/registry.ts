@@ -89,13 +89,18 @@ async function liveManager(
     }
     const manifest: CdmJson = { ...cdmJson, registry: metaRegistry };
     try {
-        return await withoutReviveTraceNoise(() =>
+        // contracts@0.9 returns a `Result` from `fromLiveClient` instead of
+        // throwing; surface the `err` channel as a throw so it lands in the
+        // MetaRegistryFailure wrapper below.
+        const result = await withoutReviveTraceNoise(() =>
             ContractManager.fromLiveClient(manifest, rawClient, getAssetHubDescriptor(env), {
                 libraries: [PLAYGROUND_REGISTRY_CONTRACT],
                 defaultOrigin: origin,
                 ...(signer ? { defaultSigner: signer.signer } : {}),
             }),
         );
+        if (!result.ok) throw result.error;
+        return result.value;
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         throw new Error(

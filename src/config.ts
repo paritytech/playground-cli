@@ -18,9 +18,10 @@
  * contract addresses, dapp identifiers, and feature defaults.
  *
  * Env IDs mirror polkadot-app-deploy's `assets/environments.json` (paseo-next,
- * paseo-next-v2, paseo-review, summit, preview, polkadot, kusama) so a single
- * value threads through both layers. paseo-next-v2 and summit are wired today;
- * others throw from `getChainConfig` until they're populated.
+ * paseo-next-v2, paseo-review, preview, polkadot, kusama) so a single value
+ * threads through both layers. Only paseo-next-v2 is wired today; others throw
+ * from `getChainConfig` until they're populated. (Summit / w3s was retired when
+ * polkadot-app-deploy 0.13.x dropped it from `environments.json`.)
  */
 
 /**
@@ -35,7 +36,6 @@ export const ENV_IDS = [
     "paseo-next",
     "paseo-review",
     "paseo-next-v2",
-    "summit",
     "polkadot",
     "kusama",
 ] as const;
@@ -51,8 +51,8 @@ export const ENV_FLAG_CHOICES: readonly string[] = [...ENV_IDS, ...LEGACY_ENV_AL
 /**
  * THE network switch. This single constant selects the active testnet for the
  * whole CLI — it feeds both `DEFAULT_ENV` and the legacy `testnet` alias in
- * `resolveLegacyEnv`. Flipping it (e.g. to `"summit"`) is the one-line change an
- * open-source actor makes to point a release at a different network; CI does the
+ * `resolveLegacyEnv`. Flipping it (e.g. to another wired env) is the one-line
+ * change an open-source actor makes to point a release at a different network; CI does the
  * rest. The `config.test.ts` guard blocks the flip until the target env's
  * endpoints match upstream AND its CDM meta-registry address exists.
  */
@@ -100,10 +100,11 @@ export interface ChainConfig {
     faucetUrl: string | null;
     /**
      * Chain name that `@parity/cdm-env`'s `getRegistryAddress` understands, used
-     * to resolve the CDM meta-registry address for this env. Differs from `env`
-     * where the two catalogs disagree (our `summit` is cdm-env's `w3s`). The
-     * meta-registry ADDRESS itself lives ONLY in `@parity/cdm-env` and is never
-     * stored here — see `src/utils/registry.ts` and CLAUDE.md.
+     * to resolve the CDM meta-registry address for this env. Kept separate from
+     * `env` because the two catalogs can disagree on a network's name (the
+     * retired summit env was cdm-env's `w3s`); `paseo-next-v2` passes through
+     * unchanged. The meta-registry ADDRESS itself lives ONLY in `@parity/cdm-env`
+     * and is never stored here — see `src/utils/registry.ts` and CLAUDE.md.
      */
     cdmEnvName: string;
     /**
@@ -135,27 +136,6 @@ const PASEO_NEXT_V2: ChainConfig = {
     pgasAssetId: 2_000_000_000,
 };
 
-// Web3 Summit network. Every endpoint/network value mirrors polkadot-app-deploy's
-// `assets/environments.json` `summit` entry verbatim (the `config.test.ts` guard
-// fails CI if they drift). The CDM meta-registry address is NOT stored here — it
-// resolves at runtime from `@parity/cdm-env` via `cdmEnvName: "w3s"`, and is empty
-// until that package ships it (see CLAUDE.md → "Adding a network / summit").
-const SUMMIT: ChainConfig = {
-    env: "summit",
-    network: "testnet",
-    tokenSymbol: "SUM",
-    relayRpc: "wss://summit-rpc.polkadot.io",
-    assetHubRpc: "wss://summit-asset-hub-rpc.polkadot.io",
-    bulletinRpc: "wss://summit-bulletin-rpc.polkadot.io",
-    bulletinRpcFallbacks: [],
-    peopleEndpoints: ["wss://summit-people-rpc.polkadot.io"],
-    bulletinGateway: "https://summit-ipfs.polkadot.io/ipfs/",
-    autoAccountMapping: true,
-    faucetUrl: null,
-    cdmEnvName: "w3s",
-    pgasAssetId: 2_000_000_000,
-};
-
 /**
  * Wired environments. Exported (read-only) so the `config.test.ts` divergence
  * guard can compare every entry against polkadot-app-deploy's `environments.json`
@@ -164,7 +144,6 @@ const SUMMIT: ChainConfig = {
  */
 export const CONFIGS: Partial<Record<Env, ChainConfig>> = {
     "paseo-next-v2": PASEO_NEXT_V2,
-    summit: SUMMIT,
     // Other envs are not wired yet — getChainConfig() throws below.
 };
 
@@ -216,8 +195,6 @@ export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
             return "paseo next";
         case "paseo-review":
             return "paseo review";
-        case "summit":
-            return "summit";
         case "preview":
             return "preview";
         case "polkadot":
@@ -230,7 +207,7 @@ export function getNetworkLabel(env: Env = DEFAULT_ENV): string {
 /**
  * Native token symbol for the given env (defaults to the active env). Display
  * only — drives balance/drip labels via `formatPas`. Flipping
- * `ACTIVE_TESTNET_ENV` (e.g. to `"summit"`) re-labels everything from here.
+ * `ACTIVE_TESTNET_ENV` re-labels everything from here.
  */
 export function getTokenSymbol(env: Env = DEFAULT_ENV): string {
     return getChainConfig(env).tokenSymbol;

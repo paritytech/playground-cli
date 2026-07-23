@@ -48,7 +48,6 @@ describe("getPgasAssetId", () => {
 
     it("returns a number for every wired env", () => {
         expect(typeof getPgasAssetId("paseo-next-v2")).toBe("number");
-        expect(typeof getPgasAssetId("summit")).toBe("number");
     });
 });
 

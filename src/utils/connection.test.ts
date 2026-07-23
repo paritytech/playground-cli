@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DEFAULT_ENV, getNetworkLabel } from "../config.js";
+import { getNetworkLabel } from "../config.js";
 
 const mockCreateClient = vi.fn();
 const mockGetWsProvider = vi.fn();
@@ -41,30 +41,17 @@ vi.mock("@parity/product-sdk-descriptors/paseo-individuality", () => ({
     paseo_individuality: { genesis: "0xpeople" },
 }));
 
-vi.mock("@parity/product-sdk-descriptors/summit-asset-hub", () => ({
-    summit_asset_hub: { genesis: "0xsummit-asset" },
-}));
-
-vi.mock("@parity/product-sdk-descriptors/summit-bulletin", () => ({
-    summit_bulletin: { genesis: "0xsummit-bulletin" },
-}));
-
-vi.mock("@parity/product-sdk-descriptors/summit-individuality", () => ({
-    summit_individuality: { genesis: "0xsummit-people" },
-}));
-
 // Re-import after each test to reset the singleton
 let getConnection: typeof import("./connection.js").getConnection;
 let destroyConnection: typeof import("./connection.js").destroyConnection;
 
-const expectedActiveDescriptors =
-    DEFAULT_ENV === "summit"
-        ? [
-              { genesis: "0xsummit-asset" },
-              { genesis: "0xsummit-bulletin" },
-              { genesis: "0xsummit-people" },
-          ]
-        : [{ genesis: "0xasset" }, { genesis: "0xbulletin" }, { genesis: "0xpeople" }];
+// Descriptors are always the paseo shapes now — product-sdk-descriptors@0.8.0
+// dropped the summit subpaths, so the selectors return paseo for every env.
+const expectedActiveDescriptors = [
+    { genesis: "0xasset" },
+    { genesis: "0xbulletin" },
+    { genesis: "0xpeople" },
+];
 
 beforeEach(async () => {
     vi.resetModules();

@@ -364,6 +364,19 @@ function asCdmAssetHubDescriptor(d: unknown): PipelineChainClient["descriptors"]
     return d as PipelineChainClient["descriptors"]["assetHub"];
 }
 
+// Same family of skew: `installContracts` comes from `@parity/cdm-builder`,
+// which pins an OLDER `@parity/product-sdk-contracts` whose `Contract.tx()`
+// resolves a bare `TxResult`. Our root bumped contracts to 0.9.x, where `.tx()`
+// resolves a `Result<TxResult, …>`, so the freshly-built `registry` contract is
+// nominally unassignable to cdm-builder's `RegistryContract` param. The
+// install-time registry is query-only (no signer wired in — see `liveManager`),
+// so `.tx()` is never invoked through it and the cast is runtime-safe. Delete
+// once cdm-builder's pinned contracts version realigns with our root.
+type CdmRegistryContract = Parameters<typeof installContracts>[0]["registry"];
+function asCdmRegistryContract(contract: unknown): CdmRegistryContract {
+    return contract as CdmRegistryContract;
+}
+
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
@@ -679,7 +692,7 @@ export async function runContractInstall(
         const result: ContractInstallRunResult = useUi
             ? await runContractInstallWithUI({
                   libraries: requests,
-                  registry,
+                  registry: asCdmRegistryContract(registry),
                   ipfs,
                   registryAddress: target.registryAddress,
                   assethubUrl: target.assethubUrl,
@@ -687,7 +700,7 @@ export async function runContractInstall(
               })
             : await installContracts({
                   libraries: requests,
-                  registry,
+                  registry: asCdmRegistryContract(registry),
                   ipfs,
                   onEvent: runOptions.onInstallEvent,
               }).then((summary) => ({ summary, success: summary.success }));
