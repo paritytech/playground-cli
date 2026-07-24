@@ -1,5 +1,5 @@
 ---
-"playground-cli": patch
+"playground-cli": minor
 ---
 
 Bump the full `@parity` dependency stack to latest published and migrate to the
@@ -15,7 +15,9 @@ Bump the full `@parity` dependency stack to latest published and migrate to the
   (single runtime instance).
 - Migrated command handlers to the `Result` API (`submitAndWatch`, contract
   `.tx`, cloud-storage `checkAuthorization`, `ContractManager.fromLiveClient`),
-  preserving user-facing error messages.
+  preserving user-facing error messages — and a failed registry publish now
+  surfaces the on-chain revert reason (e.g. `Unauthorized`, `NotRevealed`)
+  instead of a generic "reverted", failing fast on deterministic reverts.
 - Retired the `summit` / `w3s` environment: polkadot-app-deploy 0.13.x removed
   it from `environments.json` and product-sdk-descriptors 0.8.0 dropped the
   `summit-*` descriptors. Only `paseo-next-v2` is wired.

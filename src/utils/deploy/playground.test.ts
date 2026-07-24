@@ -909,4 +909,22 @@ describe("publishToPlayground", () => {
             }),
         ).rejects.toThrow(/unauthorized/);
     }, 30_000);
+
+    it("fails fast on a deterministic contract revert — surfaces the reason, no retries", async () => {
+        // A revert (decoded `.reason`) is deterministic; the retry loop must NOT
+        // burn 3 attempts on it. publishTx is called exactly once and the reason
+        // is surfaced verbatim.
+        publishTx.mockReset();
+        publishTx.mockResolvedValue({ ok: false, error: { reason: "NotRevealed" } } as any);
+
+        await expect(
+            publishToPlayground({
+                domain: "reverts",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: "/definitely/not/a/repo",
+            }),
+        ).rejects.toThrow(/reverted: NotRevealed/);
+        expect(publishTx).toHaveBeenCalledTimes(1);
+    });
 });

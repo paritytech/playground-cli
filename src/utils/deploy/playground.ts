@@ -58,6 +58,55 @@ import type { DeployLogEvent } from "./progress.js";
 const MAX_REGISTRY_RETRIES = 3;
 const REGISTRY_RETRY_DELAY_MS = 6_000;
 
+/**
+ * Classify a `@parity/product-sdk-contracts` `.tx()` `err` value in a single
+ * pass: whether it is a `deterministic` contract revert (the same call reverts
+ * identically every retry, so fail fast rather than burn the retry budget) plus
+ * a best-effort human-readable `detail` for the error message.
+ *
+ * A revert surfaces as a `ContractRevertedError` (`.reason` decoded string +
+ * raw `.data` hex), a `ContractDryRunFailedError` (only `.dispatchError`), or a
+ * `TxDispatchError` (`.formatted` like `Revive.ContractReverted` + `.dispatchError`).
+ * Transient failures (RPC drops, `TxTimeoutError`) carry none of these fields
+ * and stay retryable. Keeping the deterministic decision and the message in one
+ * function guarantees they inspect the same fields and can't drift apart.
+ *
+ * NOTE: if a specific reason proves transient — e.g. `NotRevealed` can briefly
+ * appear while a DotNS reveal propagates across nodes right after the dotns step
+ * — exclude it from `deterministic` here rather than dropping fail-fast wholesale.
+ */
+function classifyRevert(error: unknown): { deterministic: boolean; detail: string } {
+    const e = (typeof error === "object" && error !== null ? error : {}) as {
+        reason?: unknown;
+        data?: unknown;
+        formatted?: unknown;
+        dispatchError?: unknown;
+    };
+    const reason = typeof e.reason === "string" && e.reason ? e.reason : undefined;
+    const formatted = typeof e.formatted === "string" && e.formatted ? e.formatted : undefined;
+    const data = typeof e.data === "string" && e.data ? e.data : undefined;
+    let dispatch: string | undefined;
+    if (e.dispatchError != null) {
+        try {
+            dispatch = JSON.stringify(e.dispatchError);
+        } catch {
+            dispatch = String(e.dispatchError);
+        }
+    }
+    const detail =
+        reason ?? formatted ?? dispatch ?? (data ? `revert data ${data}` : errorMessage(error));
+    // A decoded reason, revert data, a dry-run/dispatch failure payload, or a
+    // revert-shaped `formatted` string all mean the chain gave a definitive
+    // verdict — retrying the identical tx changes nothing.
+    const deterministic = Boolean(
+        reason || data || e.dispatchError != null || (formatted && /revert/i.test(formatted)),
+    );
+    return { deterministic, detail };
+}
+
+/** Thrown for a deterministic contract revert so the retry loop can fail fast. */
+class RegistryPublishRevertError extends Error {}
+
 export interface PublishToPlaygroundOptions {
     /** The DotNS label (with or without `.dot`). */
     domain: string;
@@ -436,10 +485,27 @@ export async function publishToPlayground(
                         isDevSigner,
                     );
                     if (!result.ok) {
-                        throw new Error("Registry publish transaction reverted");
+                        const { deterministic, detail } = classifyRevert(result.error);
+                        const cause = result.error instanceof Error ? result.error : undefined;
+                        if (deterministic) {
+                            // Deterministic — surface immediately; retrying the
+                            // identical tx would revert the same way.
+                            throw new RegistryPublishRevertError(
+                                `Registry publish transaction reverted: ${detail}`,
+                                { cause },
+                            );
+                        }
+                        // Non-revert tx failure (timeout / RPC drop) — may be
+                        // transient, so fall through to the retry loop.
+                        throw new Error(`Registry publish transaction failed: ${detail}`, {
+                            cause,
+                        });
                     }
                     return { metadataCid, fullDomain, metadata };
                 } catch (err) {
+                    // A deterministic contract revert won't change across
+                    // retries — surface it now instead of waiting out the budget.
+                    if (err instanceof RegistryPublishRevertError) throw err;
                     lastError = err;
                     if (attempt >= MAX_REGISTRY_RETRIES) break;
                     captureWarning("Playground registry publish failed, retrying", {
