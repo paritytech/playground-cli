@@ -20,7 +20,11 @@
  */
 
 import { getTestClient } from "../helpers/chain.js";
-import { getReadOnlyRegistryContract } from "../../../src/utils/registry.js";
+import {
+	getReadOnlyRegistryContract,
+	queryMetadataUri,
+	type MetadataUriRegistry,
+} from "../../../src/utils/registry.js";
 import { resolveSigner } from "../../../src/utils/signer.js";
 import { publishToPlayground } from "../../../src/utils/deploy/playground.js";
 import { SIGNER } from "./accounts.js";
@@ -39,6 +43,8 @@ async function getRegistry(): Promise<Registry> {
 	if (!registryPromise) {
 		registryPromise = (async () => {
 			const client = await getTestClient();
+			// Registry-only resolution: these fixtures never touch the
+			// identity spine, so don't couple them to its availability.
 			return getReadOnlyRegistryContract(client.raw.assetHub);
 		})().catch((err) => {
 			// Reset so the next call can retry instead of replaying the error
@@ -51,24 +57,21 @@ async function getRegistry(): Promise<Registry> {
 
 /**
  * Query the registry for an app entry by domain.
- * Returns null if not found.
- *
- * `getMetadataUri` returns an `Option<String>` shaped as `{ isSome, value }` —
- * always a truthy object regardless of registration. The `isSome` flag is the
- * real discriminator; check it explicitly. (See cdm.json's getMetadataUri ABI.)
+ * Returns null if not found (queryMetadataUri owns the ""-sentinel decode;
+ * dry-run failures collapse to null here — fixtures treat them as "absent").
  */
 export async function getApp(domain: string): Promise<AppEntry | null> {
 	try {
 		const registry = await getRegistry();
-		const res = await registry.getMetadataUri.query(domain);
-		if (!res.success) return null;
-		const tuple = res.value as { isSome?: boolean; value?: string } | undefined;
-		if (!tuple?.isSome) return null;
-		return {
+		// Cast = the codegen seam: this tree typechecks without the gitignored
+		// .cdm augmentation, where the handle is the un-augmented
+		// Contract<ContractDef> (see MetadataUriRegistry's doc comment).
+		const metadataUri = await queryMetadataUri(
+			registry as unknown as MetadataUriRegistry,
 			domain,
-			owner: "",
-			metadataUri: String(tuple.value ?? ""),
-		};
+		);
+		if (!metadataUri) return null;
+		return { domain, owner: "", metadataUri };
 	} catch {
 		return null;
 	}

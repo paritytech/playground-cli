@@ -40,6 +40,7 @@ import { Select } from "../../utils/ui/theme/Select.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { getNetworkLabel } from "../../config.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
+import { queryMetadataUri } from "../../utils/registry.js";
 
 interface AppMetadata {
     name?: string;
@@ -94,13 +95,8 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
                     return;
                 }
                 log(`querying registry for ${domain}...`);
-                const metaRes = await registry.getMetadataUri.query(domain);
-                if (!metaRes.success) {
-                    throw new Error(
-                        `Registry lookup for "${domain}" failed at dry-run (chain rejected the call).`,
-                    );
-                }
-                const cid = metaRes.value.isSome ? metaRes.value.value : null;
+                // queryMetadataUri owns the ""-sentinel decode + dry-run error.
+                const cid = await queryMetadataUri(registry, domain);
                 if (!cid) throw new Error(`App "${domain}" not found in registry`);
 
                 log(`fetching metadata from IPFS (${cid.slice(0, 16)}...)...`);

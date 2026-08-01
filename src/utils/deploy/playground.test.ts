@@ -60,14 +60,18 @@ vi.mock("polkadot-api/ws", () => ({
 }));
 
 // Likewise stub the connection + registry helpers. We capture the publish
-// arguments so we can assert on them.
+// arguments so we can assert on them. `publish` (user/phone) and `publishDev`
+// (dev signer) are separate contract methods — the dev path must never fall
+// through to `publish`, which is gated by `require_revealed()` on-chain.
 const publishTx = vi.fn(async () => ({ ok: true, txHash: "0xdead" }));
+const publishDevTx = vi.fn(async () => ({ ok: true, txHash: "0xdead" }));
 vi.mock("../connection.js", () => ({
     getConnection: vi.fn(async () => ({ raw: { assetHub: {} } })),
 }));
 vi.mock("../registry.js", () => ({
     getRegistryContract: vi.fn(async () => ({
         publish: { tx: publishTx },
+        publishDev: { tx: publishDevTx },
     })),
 }));
 vi.mock("../../telemetry.js", () => ({
@@ -103,6 +107,8 @@ const fakeSigner: ResolvedSigner = {
 beforeEach(() => {
     publishTx.mockClear();
     publishTx.mockImplementation(async () => ({ ok: true, txHash: "0xdead" }));
+    publishDevTx.mockClear();
+    publishDevTx.mockImplementation(async () => ({ ok: true, txHash: "0xdead" }));
     captureWarningMock.mockClear();
     withSpanMock.mockClear();
     getBulletinAllowanceSignerMock.mockClear();
@@ -509,18 +515,18 @@ describe("publishToPlayground", () => {
                 expect.objectContaining({ __kind: "store" }),
                 bulletinStorageSigner,
             );
+            // 7 args: the trailing `is_dev_signer` boolean stays on the ABI
+            // for compatibility but the contract ignores it — always false.
             expect(publishTx).toHaveBeenCalledWith(
                 "my-app.dot",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
+                "0x0000000000000000000000000000000000000000",
                 "",
                 false,
                 false,
             );
+            expect(publishDevTx).not.toHaveBeenCalled();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -582,7 +588,26 @@ describe("publishToPlayground", () => {
         }
     });
 
-    it("passes claimedOwnerH160 through as the dev-signer publish owner argument", async () => {
+    it("rejects claimedOwnerH160 without isDevSigner before any on-chain work", async () => {
+        // The registry honors the owner override only on publishDev; a user
+        // publish with owner ≠ caller reverts OwnerOverrideForbidden — after
+        // the metadata upload has been paid for. The API boundary must catch
+        // the combination before the upload.
+        await expect(
+            publishToPlayground({
+                domain: "claimed-user-app",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: "/definitely/not/a/repo",
+                claimedOwnerH160: "0x1234567890abcdef1234567890abcdef12345678",
+            }),
+        ).rejects.toThrow(/claimedOwnerH160 requires isDevSigner/);
+        expect(submitAndWatch).not.toHaveBeenCalled(); // no metadata upload
+        expect(publishTx).not.toHaveBeenCalled();
+        expect(publishDevTx).not.toHaveBeenCalled();
+    });
+
+    it("passes claimedOwnerH160 through as the publishDev owner argument", async () => {
         await publishToPlayground({
             domain: "claimed-app",
             publishSigner: fakeSigner,
@@ -591,18 +616,15 @@ describe("publishToPlayground", () => {
             claimedOwnerH160: "0x1234567890abcdef1234567890abcdef12345678",
             isDevSigner: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
+        expect(publishDevTx).toHaveBeenCalledWith(
             "claimed-app.dot",
             "bafymeta",
             1,
-            {
-                isSome: true,
-                value: "0x1234567890abcdef1234567890abcdef12345678",
-            },
+            "0x1234567890abcdef1234567890abcdef12345678",
             "",
             false,
-            true,
         );
+        expect(publishTx).not.toHaveBeenCalled();
     });
 
     it("passes visibility=0 when isPrivate is true", async () => {
@@ -617,17 +639,14 @@ describe("publishToPlayground", () => {
             "secret.dot",
             "bafymeta",
             0,
-            {
-                isSome: false,
-                value: "0x0000000000000000000000000000000000000000",
-            },
+            "0x0000000000000000000000000000000000000000",
             "",
             false,
             false,
         );
     });
 
-    it("routes dev signer publishes through publish with is_dev_signer=true", async () => {
+    it("routes dev signer publishes through the separate publishDev method (6 args, no flag)", async () => {
         await publishToPlayground({
             domain: "modded-by-dev",
             publishSigner: fakeSigner,
@@ -636,18 +655,19 @@ describe("publishToPlayground", () => {
             isModdable: true,
             isDevSigner: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
+        // The zero address is the "no claimed owner" sentinel — the contract
+        // records env::caller() (the dev signer) as owner.
+        expect(publishDevTx).toHaveBeenCalledWith(
             "modded-by-dev.dot",
             "bafymeta",
             1,
-            {
-                isSome: false,
-                value: "0x0000000000000000000000000000000000000000",
-            },
+            "0x0000000000000000000000000000000000000000",
             "",
             true,
-            true,
         );
+        // Never `publish` for dev: it's reveal-gated on-chain and would revert
+        // NotRevealed for the (never-revealed) dev signer.
+        expect(publishTx).not.toHaveBeenCalled();
     });
 
     it("forwards moddedFrom captured by `dot mod` in dot.json to registry.publish", async () => {
@@ -664,10 +684,7 @@ describe("publishToPlayground", () => {
                 "my-mod.dot",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
+                "0x0000000000000000000000000000000000000000",
                 "original.dot",
                 false,
                 false,
@@ -702,10 +719,7 @@ describe("publishToPlayground", () => {
                 "my-mod.dot",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
+                "0x0000000000000000000000000000000000000000",
                 "steampunk-lizard-spock01.dot",
                 false,
                 false,
@@ -736,10 +750,7 @@ describe("publishToPlayground", () => {
                 "my-mod.dot",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
+                "0x0000000000000000000000000000000000000000",
                 "steampunk-lizard-spock01.dot",
                 false,
                 false,
@@ -765,10 +776,7 @@ describe("publishToPlayground", () => {
                 "my-mod.dot",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
+                "0x0000000000000000000000000000000000000000",
                 "original.dot",
                 false,
                 false,
@@ -797,10 +805,7 @@ describe("publishToPlayground", () => {
                 "my-mod.dot",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
+                "0x0000000000000000000000000000000000000000",
                 "original.dot",
                 false,
                 false,
@@ -926,5 +931,38 @@ describe("publishToPlayground", () => {
             }),
         ).rejects.toThrow(/reverted: NotRevealed/);
         expect(publishTx).toHaveBeenCalledTimes(1);
+    });
+
+    it("appends the become-a-builder remedy to a NotRevealed revert (keyed on the decoded reason)", async () => {
+        publishTx.mockReset();
+        publishTx.mockResolvedValue({ ok: false, error: { reason: "NotRevealed" } } as any);
+
+        await expect(
+            publishToPlayground({
+                domain: "unrevealed",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: "/definitely/not/a/repo",
+            }),
+        ).rejects.toThrow(/Become a builder/);
+    });
+
+    it("appends a dev-signer remedy to an Unauthorized publishDev revert", async () => {
+        // The two dev-branch Unauthorized causes (caller not a known dev
+        // signer / re-publishing a non-dev-published app) both point at this
+        // hint rather than a bare revert name.
+        publishDevTx.mockReset();
+        publishDevTx.mockResolvedValue({ ok: false, error: { reason: "Unauthorized" } } as any);
+
+        await expect(
+            publishToPlayground({
+                domain: "not-a-dev",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: "/definitely/not/a/repo",
+                isDevSigner: true,
+            }),
+        ).rejects.toThrow(/known dev signers/);
+        expect(publishTx).not.toHaveBeenCalled();
     });
 });

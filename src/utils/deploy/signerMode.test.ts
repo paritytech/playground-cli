@@ -28,7 +28,9 @@ vi.mock("../allowances/bulletin.js", () => ({
 
 import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
 import { ss58Encode } from "@parity/product-sdk-address";
+import { seedToAccount } from "@parity/product-sdk-keys";
 import {
+    isKnownDevPublishSigner,
     resolveSignerSetup,
     resolveStorageSignerOptions,
     DEV_PUBLISH_ADDRESS,
@@ -56,6 +58,31 @@ function fakeSigner(
         destroy: () => {},
     };
 }
+
+describe("isKnownDevPublishSigner", () => {
+    // The contract authorizes `publishDev` by env::caller() matching one of
+    // its compiled-in dev-signer H160s. These tests pin the routing rule:
+    // on-chain identity decides, not `--suri` provenance.
+
+    it("recognizes the polkadot-app-deploy bare-root dev publish signer", () => {
+        expect(isKnownDevPublishSigner(fakeSigner("dev", DEV_PUBLISH_ADDRESS))).toBe(true);
+    });
+
+    it("rejects an arbitrary --suri key (must publish as a reveal-gated user)", () => {
+        // Same derivation the e2e deployer uses: dev provenance, but its H160
+        // is not a contract dev signer, so publishDev would revert Unauthorized.
+        const e2e = seedToAccount(DEFAULT_MNEMONIC, "//e2e-deployer");
+        expect(isKnownDevPublishSigner(fakeSigner("dev", ss58Encode(e2e.publicKey)))).toBe(false);
+    });
+
+    it("rejects session signers regardless of address", () => {
+        expect(isKnownDevPublishSigner(fakeSigner("session", DEV_PUBLISH_ADDRESS))).toBe(false);
+    });
+
+    it("returns false (not a throw) for an undecodable address", () => {
+        expect(isKnownDevPublishSigner(fakeSigner("dev", "not-an-ss58"))).toBe(false);
+    });
+});
 
 describe("resolveSignerSetup — dev mode", () => {
     it("no publish, no funding → empty approvals, explicit dev mnemonic, null publishSigner", () => {

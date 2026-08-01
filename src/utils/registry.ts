@@ -14,7 +14,9 @@
 // limitations under the License.
 
 /**
- * Playground registry contract access.
+ * Playground contract access — the app registry and the identity spine
+ * (`@w3s/playground-identity`, the global "is this account a revealed
+ * builder?" contract the registry's publish gate delegates to).
  */
 
 import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
@@ -26,6 +28,7 @@ import type { ResolvedSigner } from "./signer.js";
 import { getAssetHubDescriptor } from "./descriptors.js";
 import { unwrapResult } from "./tx.js";
 import {
+    PLAYGROUND_IDENTITY_CONTRACT,
     PLAYGROUND_REGISTRY_CONTRACT,
     suppressReviveTraceNoise,
     withoutReviveTraceNoise,
@@ -77,7 +80,8 @@ const READ_ONLY_QUERY_ORIGIN = ss58Encode(REVIVE_PALLET_PUBLIC_KEY);
 async function liveManager(
     rawClient: PolkadotClient,
     origin: string,
-    signer?: ResolvedSigner,
+    signer: ResolvedSigner | undefined,
+    libraries: string[],
 ): Promise<ContractManager> {
     const { env, cdmEnvName } = getChainConfig();
     const metaRegistry = getRegistryAddress(cdmEnvName);
@@ -96,7 +100,7 @@ async function liveManager(
         return unwrapResult(
             await withoutReviveTraceNoise(() =>
                 ContractManager.fromLiveClient(manifest, rawClient, getAssetHubDescriptor(env), {
-                    libraries: [PLAYGROUND_REGISTRY_CONTRACT],
+                    libraries,
                     defaultOrigin: origin,
                     ...(signer ? { defaultSigner: signer.signer } : {}),
                 }),
@@ -117,21 +121,99 @@ async function liveManager(
  * funded + mapped user signer.
  */
 export async function getRegistryContract(rawClient: PolkadotClient, signer: ResolvedSigner) {
-    const manager = await liveManager(rawClient, signer.address, signer);
+    const manager = await liveManager(rawClient, signer.address, signer, [
+        PLAYGROUND_REGISTRY_CONTRACT,
+    ]);
     return suppressReviveTraceNoise(manager.getContract(PLAYGROUND_REGISTRY_CONTRACT));
 }
 
 /**
- * Get a read-only handle to the registry contract. No signer required; reads
- * use `READ_ONLY_QUERY_ORIGIN` as the dry-run origin. Use this from any path
- * that only calls `.query()` methods (e.g. `dot mod` listing moddable apps),
- * so the command doesn't need the user to be logged in / mapped first.
+ * Get a read-only handle to the registry contract only. No signer required;
+ * reads use `READ_ONLY_QUERY_ORIGIN` as the dry-run origin. Use this from
+ * paths that never touch the identity spine (e.g. e2e fixture readbacks,
+ * operator listing tools) so a spine-resolution problem in the meta-registry
+ * can't take down pure registry reads.
  *
- * Do NOT call `.tx()` on the returned contract — there is no signer wired in,
- * and `defaultOrigin` is the keyless pallet-revive account, so any submission
- * would either crash or be misattributed.
+ * Do NOT call `.tx()` on the returned contract — there is no signer wired
+ * in, and `defaultOrigin` is the keyless pallet-revive account, so any
+ * submission would either crash or be misattributed. (Same caveat for the
+ * two accessors below.)
  */
 export async function getReadOnlyRegistryContract(rawClient: PolkadotClient) {
-    const manager = await liveManager(rawClient, READ_ONLY_QUERY_ORIGIN);
+    const manager = await liveManager(rawClient, READ_ONLY_QUERY_ORIGIN, undefined, [
+        PLAYGROUND_REGISTRY_CONTRACT,
+    ]);
     return suppressReviveTraceNoise(manager.getContract(PLAYGROUND_REGISTRY_CONTRACT));
+}
+
+/**
+ * Get a read-only handle to the identity spine only — the builder-reveal
+ * read (`isVerified`) the identity gate needs. Kept separate from the
+ * registry accessor so the gate's self-resolve path doesn't pay for (or
+ * couple itself to) a registry address resolution it never uses.
+ */
+export async function getReadOnlyIdentityContract(rawClient: PolkadotClient) {
+    const manager = await liveManager(rawClient, READ_ONLY_QUERY_ORIGIN, undefined, [
+        PLAYGROUND_IDENTITY_CONTRACT,
+    ]);
+    return suppressReviveTraceNoise(manager.getContract(PLAYGROUND_IDENTITY_CONTRACT));
+}
+
+/**
+ * Get read-only handles to BOTH playground contracts — the registry (app
+ * feed, metadata lookups) and the identity spine (builder-reveal reads) — in
+ * ONE `fromLiveClient` pass (the per-library lookups run in parallel inside
+ * the SDK, so this costs no extra latency over resolving either alone). Use
+ * this from paths that genuinely need both, e.g. `dot mod` (browse + gate).
+ * Note the pass is atomic: if EITHER library fails to resolve from the
+ * meta-registry, both handles fail — single-contract paths should use the
+ * dedicated accessors above.
+ */
+export async function getReadOnlyPlaygroundContracts(rawClient: PolkadotClient) {
+    const manager = await liveManager(rawClient, READ_ONLY_QUERY_ORIGIN, undefined, [
+        PLAYGROUND_REGISTRY_CONTRACT,
+        PLAYGROUND_IDENTITY_CONTRACT,
+    ]);
+    return {
+        registry: suppressReviveTraceNoise(manager.getContract(PLAYGROUND_REGISTRY_CONTRACT)),
+        identity: suppressReviveTraceNoise(manager.getContract(PLAYGROUND_IDENTITY_CONTRACT)),
+    };
+}
+
+/**
+ * Minimal structural view of the one registry read several call sites share.
+ * Widened to `unknown` on the value so the helper owns the runtime narrowing.
+ * Exported so callers typechecked WITHOUT the gitignored `.cdm` augmentation
+ * (CI, the e2e tree) have a named seam to cast the un-augmented
+ * `Contract<ContractDef>` handle through — its string-index methods satisfy
+ * property access but not structural assignability.
+ */
+export interface MetadataUriRegistry {
+    getMetadataUri: { query(domain: string): Promise<{ success: boolean; value?: unknown }> };
+}
+
+/**
+ * Read a domain's metadata URI from the registry and decode the contract's
+ * none/tombstone sentinel in ONE place: the ABI has no Option shape — the
+ * return is a plain string and `""` means "not published / tombstoned",
+ * mapped to `null` here. Throws on a rejected dry-run, and on a non-string
+ * response (bundled-ABI vs live-contract drift) rather than letting a stale
+ * shape leak into gateway URLs as `[object Object]`.
+ */
+export async function queryMetadataUri(
+    registry: MetadataUriRegistry,
+    domain: string,
+): Promise<string | null> {
+    const res = await registry.getMetadataUri.query(domain);
+    if (!res.success) {
+        throw new Error(
+            `Registry lookup for "${domain}" failed at dry-run (chain rejected the call)`,
+        );
+    }
+    if (typeof res.value !== "string") {
+        throw new Error(
+            `Unrecognized getMetadataUri response for "${domain}": ${typeof res.value} (bundled ABI vs live contract drift?)`,
+        );
+    }
+    return res.value || null;
 }

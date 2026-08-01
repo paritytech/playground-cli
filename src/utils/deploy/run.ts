@@ -27,6 +27,7 @@ import { runBuild, loadDetectInput, detectBuildConfig, type BuildConfig } from "
 import { publishToPlayground, normalizeDomain } from "./playground.js";
 import { assertBuildDirExists } from "./buildDir.js";
 import {
+    isKnownDevPublishSigner,
     resolveSignerSetup,
     resolveStorageSignerOptions,
     type SignerMode,
@@ -304,7 +305,10 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                     env: options.env,
                     isPrivate: options.playgroundPrivate,
                     isModdable: options.moddable ?? false,
-                    isDevSigner: publishSigner.source === "dev",
+                    // Route by on-chain identity, not by `--suri` provenance:
+                    // only the contract's known dev signers may `publishDev`;
+                    // any other local key publishes as a (reveal-gated) user.
+                    isDevSigner: isKnownDevPublishSigner(publishSigner),
                 }),
         );
         return pub.metadataCid;

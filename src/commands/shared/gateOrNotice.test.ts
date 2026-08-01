@@ -70,12 +70,12 @@ describe("enforceIdentityGate", () => {
         },
     );
 
-    it("forwards a pre-resolved registry to the gate (so mod doesn't re-resolve)", async () => {
+    it("forwards a pre-resolved identity-spine handle to the gate (so mod doesn't re-resolve)", async () => {
         checkIdentityGateMock.mockResolvedValue({ status: "revealed", productH160: H160 });
-        const registry = { getRootAccount: { query: vi.fn() } };
+        const identity = { isVerified: { query: vi.fn() } };
 
-        await enforceIdentityGate(RAW, registry as any);
+        await enforceIdentityGate(RAW, identity as any);
 
-        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, { registry });
+        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, { identity });
     });
 });

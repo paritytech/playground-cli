@@ -61,6 +61,9 @@ async function main(): Promise<number> {
         const registry = await getReadOnlyRegistryContract(client.raw.assetHub);
 
         const res = await registry.getApps.query(0, 100);
+        if (!res.success) {
+            throw new Error(`getApps dry-run was rejected: ${JSON.stringify(res.value)}`);
+        }
         const value = res.value as { entries: RegistryEntry[]; total: number };
         console.log(`live registry has ${value.total} app(s); inspecting up to 100:\n`);
 
