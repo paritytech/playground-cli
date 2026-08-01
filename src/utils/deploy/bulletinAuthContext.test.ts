@@ -14,7 +14,6 @@
 // limitations under the License.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_ENV } from "../../config.js";
 
 const { createClientMock, getWsProviderMock, destroyMock, getTypedApiMock } = vi.hoisted(() => ({
     createClientMock: vi.fn(),
@@ -26,14 +25,12 @@ const { createClientMock, getWsProviderMock, destroyMock, getTypedApiMock } = vi
 vi.mock("polkadot-api", () => ({ createClient: createClientMock }));
 vi.mock("polkadot-api/ws", () => ({ getWsProvider: getWsProviderMock }));
 vi.mock("@parity/product-sdk-descriptors/paseo-bulletin", () => ({ paseo_bulletin: {} }));
-vi.mock("@parity/product-sdk-descriptors/summit-bulletin", () => ({
-    summit_bulletin: { genesis: "0xsummit-bulletin" },
-}));
 
 import { createBulletinAuthContext } from "./bulletinAuthContext.js";
 
-const expectedActiveBulletinDescriptor =
-    DEFAULT_ENV === "summit" ? { genesis: "0xsummit-bulletin" } : {};
+// The bulletin descriptor is always the paseo shape now (product-sdk-descriptors
+// @0.8.0 dropped the summit subpaths), regardless of the active env.
+const expectedActiveBulletinDescriptor = {};
 
 beforeEach(() => {
     createClientMock.mockReset();

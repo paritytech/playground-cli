@@ -144,10 +144,21 @@ export async function getBulletinSlotAuthorization(
     slotSigner: PolkadotSigner,
 ): Promise<BulletinSlotAuthorization> {
     const address = ss58Encode(slotSigner.publicKey);
-    const [status, currentBlock] = await Promise.all([
+    const [statusResult, currentBlock] = await Promise.all([
         checkAuthorization(bulletinApi, address),
         readBulletinBlockNumber(bulletinApi),
     ]);
+    // cloud-storage@0.8 returns a `Result`: `err` means the on-chain query
+    // itself FAILED (a transient read error), NOT "unauthorized" — an existing
+    // authorization that is simply absent comes back as `ok` with
+    // `authorized:false`. Re-throw the read error so callers can tell the two
+    // apart: `getBulletinAllowanceSigner` catches a read failure and DEGRADES to
+    // proceeding with the slot signer (the check is a fail-fast optimization,
+    // not a gate), and aborts ONLY on a successfully-read missing/expired
+    // authorization. Swallowing the error into a synthetic "unusable" status
+    // would abort otherwise-valid deploys on a transient RPC glitch.
+    if (!statusResult.ok) throw statusResult.error;
+    const status = statusResult.value;
     return { address, status, usable: isAuthorizationActive(status, currentBlock) };
 }
 
@@ -283,6 +294,29 @@ export async function getCachedBulletinAllowanceSigner({
 }
 
 export function isInvalidPaymentError(err: unknown): boolean {
-    const message = err instanceof Error ? err.message : String(err);
-    return /"type"\s*:\s*"Invalid"[\s\S]*"type"\s*:\s*"Payment"/.test(message);
+    // `@parity/product-sdk-tx@0.3` surfaces submit failures as a typed
+    // `TxError`/`TxDispatchError` on the `err` channel rather than a thrown
+    // `Error` whose message is the raw dispatch payload. The "Invalid/Payment"
+    // marker can therefore live in `.message`, in `.formatted`, or only in the
+    // raw `.dispatchError` payload — so inspect all three (plus the `cause`
+    // chain) to keep the Bulletin allowance re-check firing.
+    const parts: string[] = [];
+    const seen = new Set<unknown>();
+    let current: unknown = err;
+    while (current != null && !seen.has(current)) {
+        seen.add(current);
+        if (current instanceof Error) parts.push(current.message);
+        const rec = current as { formatted?: unknown; dispatchError?: unknown; cause?: unknown };
+        if (rec.formatted != null) parts.push(String(rec.formatted));
+        if (rec.dispatchError != null) {
+            try {
+                parts.push(JSON.stringify(rec.dispatchError));
+            } catch {
+                parts.push(String(rec.dispatchError));
+            }
+        }
+        if (!(current instanceof Error) && typeof current !== "object") parts.push(String(current));
+        current = rec.cause;
+    }
+    return /"type"\s*:\s*"Invalid"[\s\S]*"type"\s*:\s*"Payment"/.test(parts.join(" "));
 }

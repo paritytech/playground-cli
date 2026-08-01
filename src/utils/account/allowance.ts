@@ -22,6 +22,7 @@
 
 import { Enum } from "polkadot-api";
 import { submitAndWatch, createDevSigner } from "@parity/product-sdk-tx";
+import { unwrapResult } from "../tx.js";
 import type { PaseoClient } from "../connection.js";
 import { remainingAuthorizationExtent } from "./authorizationExtent.js";
 
@@ -68,12 +69,14 @@ export async function ensureAllowance(client: PaseoClient, address: string): Pro
     if (status.authorized && status.remainingTxs >= LOW_TX_THRESHOLD) return;
 
     const alice = createDevSigner("Alice");
-    await submitAndWatch(
-        client.bulletin.tx.TransactionStorage.authorize_account({
-            who: address,
-            transactions: BULLETIN_TRANSACTIONS,
-            bytes: BULLETIN_BYTES,
-        }),
-        alice,
+    unwrapResult(
+        await submitAndWatch(
+            client.bulletin.tx.TransactionStorage.authorize_account({
+                who: address,
+                transactions: BULLETIN_TRANSACTIONS,
+                bytes: BULLETIN_BYTES,
+            }),
+            alice,
+        ),
     );
 }

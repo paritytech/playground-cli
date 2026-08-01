@@ -18,7 +18,7 @@
  *
  * We upload the metadata JSON through Bulletin `TransactionStorage.store`
  * with the product-scoped RFC-0010 Bulletin allowance account, then call
- * `registry.publish(...)` / `registry.publishDev(...)` ourselves via
+ * `registry.publish(...)` (with the `is_dev_signer` flag) ourselves via
  * `getRegistryContract()`.
  * Phone publishing is signed by the user's product account so the contract's
  * `env::caller()` matches their address. Dev publishing is signed by the dev
@@ -38,6 +38,7 @@ import { createClient } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";
 import { calculateCid } from "@parity/product-sdk-cloud-storage";
 import { submitAndWatch, withRetry } from "@parity/product-sdk-tx";
+import { unwrapResult } from "../tx.js";
 import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
@@ -57,6 +58,55 @@ import type { DeployLogEvent } from "./progress.js";
 const MAX_REGISTRY_RETRIES = 3;
 const REGISTRY_RETRY_DELAY_MS = 6_000;
 
+/**
+ * Classify a `@parity/product-sdk-contracts` `.tx()` `err` value in a single
+ * pass: whether it is a `deterministic` contract revert (the same call reverts
+ * identically every retry, so fail fast rather than burn the retry budget) plus
+ * a best-effort human-readable `detail` for the error message.
+ *
+ * A revert surfaces as a `ContractRevertedError` (`.reason` decoded string +
+ * raw `.data` hex), a `ContractDryRunFailedError` (only `.dispatchError`), or a
+ * `TxDispatchError` (`.formatted` like `Revive.ContractReverted` + `.dispatchError`).
+ * Transient failures (RPC drops, `TxTimeoutError`) carry none of these fields
+ * and stay retryable. Keeping the deterministic decision and the message in one
+ * function guarantees they inspect the same fields and can't drift apart.
+ *
+ * NOTE: if a specific reason proves transient — e.g. `NotRevealed` can briefly
+ * appear while a DotNS reveal propagates across nodes right after the dotns step
+ * — exclude it from `deterministic` here rather than dropping fail-fast wholesale.
+ */
+function classifyRevert(error: unknown): { deterministic: boolean; detail: string } {
+    const e = (typeof error === "object" && error !== null ? error : {}) as {
+        reason?: unknown;
+        data?: unknown;
+        formatted?: unknown;
+        dispatchError?: unknown;
+    };
+    const reason = typeof e.reason === "string" && e.reason ? e.reason : undefined;
+    const formatted = typeof e.formatted === "string" && e.formatted ? e.formatted : undefined;
+    const data = typeof e.data === "string" && e.data ? e.data : undefined;
+    let dispatch: string | undefined;
+    if (e.dispatchError != null) {
+        try {
+            dispatch = JSON.stringify(e.dispatchError);
+        } catch {
+            dispatch = String(e.dispatchError);
+        }
+    }
+    const detail =
+        reason ?? formatted ?? dispatch ?? (data ? `revert data ${data}` : errorMessage(error));
+    // A decoded reason, revert data, a dry-run/dispatch failure payload, or a
+    // revert-shaped `formatted` string all mean the chain gave a definitive
+    // verdict — retrying the identical tx changes nothing.
+    const deterministic = Boolean(
+        reason || data || e.dispatchError != null || (formatted && /revert/i.test(formatted)),
+    );
+    return { deterministic, detail };
+}
+
+/** Thrown for a deterministic contract revert so the retry loop can fail fast. */
+class RegistryPublishRevertError extends Error {}
+
 export interface PublishToPlaygroundOptions {
     /** The DotNS label (with or without `.dot`). */
     domain: string;
@@ -64,7 +114,8 @@ export interface PublishToPlaygroundOptions {
      * Signer that submits the registry publish tx. In phone mode this is the
      * user's session signer and calls `publish(...)` (caller becomes owner).
      * In dev mode this is a dev signer (Alice / `--suri`) and calls
-     * `publishDev(...)`; `claimedOwnerH160` carries the H160 to record as owner.
+     * `publish(...)` with `is_dev_signer: true`; `claimedOwnerH160` carries the
+     * H160 to record as owner.
      */
     publishSigner: ResolvedSigner;
     /**
@@ -130,9 +181,9 @@ export interface PublishToPlaygroundOptions {
     moddedFrom?: string;
     /**
      * True when the publish is signed by the dev signer (Alice / `--suri`)
-     * rather than the user's session. Dev publishes use the ungated
-     * `publishDev(...)` contract path, which records the app without awarding
-     * deploy XP or source-app mod XP.
+     * rather than the user's session. Dev publishes set the ungated
+     * `is_dev_signer` flag on `publish(...)`, which records the app without
+     * awarding deploy XP or source-app mod XP.
      */
     isDevSigner?: boolean;
 }
@@ -362,7 +413,9 @@ export async function publishToPlayground(
                     onPrompt: options.onAllowancePrompt,
                 });
                 try {
-                    await withRetry(() => submitAndWatch(storeTx, storageSigner));
+                    await withRetry(() =>
+                        submitAndWatch(storeTx, storageSigner).then(unwrapResult),
+                    );
                 } catch (err) {
                     if (!isInvalidPaymentError(err) || options.publishSigner.source !== "session") {
                         throw err;
@@ -376,7 +429,9 @@ export async function publishToPlayground(
                         bulletinApi: asCloudStorageApi(bulletinApi),
                         onPrompt: options.onAllowancePrompt,
                     });
-                    await withRetry(() => submitAndWatch(storeTx, storageSigner));
+                    await withRetry(() =>
+                        submitAndWatch(storeTx, storageSigner).then(unwrapResult),
+                    );
                 }
                 return cid;
             } finally {
@@ -415,29 +470,42 @@ export async function publishToPlayground(
                     const moddedFromArg = moddedFrom ?? "";
                     const isModdable = options.isModdable ?? false;
                     const isDevSigner = options.isDevSigner ?? false;
-                    const result = isDevSigner
-                        ? await registry.publishDev.tx(
-                              fullDomain,
-                              metadataCid,
-                              visibility,
-                              owner,
-                              moddedFromArg,
-                              isModdable,
-                          )
-                        : await registry.publish.tx(
-                              fullDomain,
-                              metadataCid,
-                              visibility,
-                              owner,
-                              moddedFromArg,
-                              isModdable,
-                              false,
-                          );
-                    if (result && result.ok === false) {
-                        throw new Error("Registry publish transaction reverted");
+                    // contracts@0.9 dropped the separate `publishDev` method:
+                    // the dev-signer path is now the same `publish` call with
+                    // the trailing `is_dev_signer` boolean set. `true` records
+                    // the app without awarding mod XP (the former `publishDev`
+                    // behaviour); `false` is the normal user publish.
+                    const result = await registry.publish.tx(
+                        fullDomain,
+                        metadataCid,
+                        visibility,
+                        owner,
+                        moddedFromArg,
+                        isModdable,
+                        isDevSigner,
+                    );
+                    if (!result.ok) {
+                        const { deterministic, detail } = classifyRevert(result.error);
+                        const cause = result.error instanceof Error ? result.error : undefined;
+                        if (deterministic) {
+                            // Deterministic — surface immediately; retrying the
+                            // identical tx would revert the same way.
+                            throw new RegistryPublishRevertError(
+                                `Registry publish transaction reverted: ${detail}`,
+                                { cause },
+                            );
+                        }
+                        // Non-revert tx failure (timeout / RPC drop) — may be
+                        // transient, so fall through to the retry loop.
+                        throw new Error(`Registry publish transaction failed: ${detail}`, {
+                            cause,
+                        });
                     }
                     return { metadataCid, fullDomain, metadata };
                 } catch (err) {
+                    // A deterministic contract revert won't change across
+                    // retries — surface it now instead of waiting out the budget.
+                    if (err instanceof RegistryPublishRevertError) throw err;
                     lastError = err;
                     if (attempt >= MAX_REGISTRY_RETRIES) break;
                     captureWarning("Playground registry publish failed, retrying", {

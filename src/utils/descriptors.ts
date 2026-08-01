@@ -16,35 +16,33 @@
 import { paseo_asset_hub } from "@parity/product-sdk-descriptors/paseo-asset-hub";
 import { paseo_bulletin } from "@parity/product-sdk-descriptors/paseo-bulletin";
 import { paseo_individuality } from "@parity/product-sdk-descriptors/paseo-individuality";
-import { summit_asset_hub } from "@parity/product-sdk-descriptors/summit-asset-hub";
-import { summit_bulletin } from "@parity/product-sdk-descriptors/summit-bulletin";
-import { summit_individuality } from "@parity/product-sdk-descriptors/summit-individuality";
 import type { Env } from "../config.js";
 
 export type AssetHubDescriptor = typeof paseo_asset_hub;
 export type BulletinDescriptor = typeof paseo_bulletin;
 export type IndividualityDescriptor = typeof paseo_individuality;
 
-function isSummit(env: Env | undefined): boolean {
-    return env === "summit";
-}
-
 /**
- * Descriptor selection follows the active product network. The return types
- * intentionally keep the existing paseo-shaped surface: the call sites use
- * common pallets only, and narrowing the whole client graph to descriptor
- * unions would force every account/status helper to carry duplicate types.
+ * Descriptor selection.
+ *
+ * `@parity/product-sdk-descriptors@0.8.0` dropped the `summit-*` descriptor
+ * subpaths upstream — only the paseo-next-v2 (`paseo-*`) descriptors ship today.
+ * Direct PAPI reads touch common pallets only (System, Revive,
+ * TransactionStorage), which are identical across the wired chains, so every env
+ * resolves to the paseo descriptor shape — the same effect as the previous
+ * cast-through-`unknown` selectors, minus the (now non-existent) summit branch.
+ * The `env` parameter is retained for call-site compatibility and so per-env
+ * selection can be restored here the moment another env regains dedicated
+ * descriptors.
  */
-export function getAssetHubDescriptor(env: Env | undefined): AssetHubDescriptor {
-    return (isSummit(env) ? summit_asset_hub : paseo_asset_hub) as unknown as AssetHubDescriptor;
+export function getAssetHubDescriptor(_env: Env | undefined): AssetHubDescriptor {
+    return paseo_asset_hub;
 }
 
-export function getBulletinDescriptor(env: Env | undefined): BulletinDescriptor {
-    return (isSummit(env) ? summit_bulletin : paseo_bulletin) as unknown as BulletinDescriptor;
+export function getBulletinDescriptor(_env: Env | undefined): BulletinDescriptor {
+    return paseo_bulletin;
 }
 
-export function getIndividualityDescriptor(env: Env | undefined): IndividualityDescriptor {
-    return (isSummit(env)
-        ? summit_individuality
-        : paseo_individuality) as unknown as IndividualityDescriptor;
+export function getIndividualityDescriptor(_env: Env | undefined): IndividualityDescriptor {
+    return paseo_individuality;
 }

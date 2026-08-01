@@ -24,6 +24,7 @@ import type { PolkadotClient } from "polkadot-api";
 import { getChainConfig } from "../config.js";
 import type { ResolvedSigner } from "./signer.js";
 import { getAssetHubDescriptor } from "./descriptors.js";
+import { unwrapResult } from "./tx.js";
 import {
     PLAYGROUND_REGISTRY_CONTRACT,
     suppressReviveTraceNoise,
@@ -89,12 +90,17 @@ async function liveManager(
     }
     const manifest: CdmJson = { ...cdmJson, registry: metaRegistry };
     try {
-        return await withoutReviveTraceNoise(() =>
-            ContractManager.fromLiveClient(manifest, rawClient, getAssetHubDescriptor(env), {
-                libraries: [PLAYGROUND_REGISTRY_CONTRACT],
-                defaultOrigin: origin,
-                ...(signer ? { defaultSigner: signer.signer } : {}),
-            }),
+        // contracts@0.9 returns a `Result` from `fromLiveClient` instead of
+        // throwing; `unwrapResult` surfaces the `err` channel as a throw so it
+        // lands in the MetaRegistryFailure wrapper below.
+        return unwrapResult(
+            await withoutReviveTraceNoise(() =>
+                ContractManager.fromLiveClient(manifest, rawClient, getAssetHubDescriptor(env), {
+                    libraries: [PLAYGROUND_REGISTRY_CONTRACT],
+                    defaultOrigin: origin,
+                    ...(signer ? { defaultSigner: signer.signer } : {}),
+                }),
+            ),
         );
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

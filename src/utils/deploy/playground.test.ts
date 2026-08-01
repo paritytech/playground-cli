@@ -62,14 +62,12 @@ vi.mock("polkadot-api/ws", () => ({
 // Likewise stub the connection + registry helpers. We capture the publish
 // arguments so we can assert on them.
 const publishTx = vi.fn(async () => ({ ok: true, txHash: "0xdead" }));
-const publishDevTx = vi.fn(async () => ({ ok: true, txHash: "0xfeed" }));
 vi.mock("../connection.js", () => ({
     getConnection: vi.fn(async () => ({ raw: { assetHub: {} } })),
 }));
 vi.mock("../registry.js", () => ({
     getRegistryContract: vi.fn(async () => ({
         publish: { tx: publishTx },
-        publishDev: { tx: publishDevTx },
     })),
 }));
 vi.mock("../../telemetry.js", () => ({
@@ -105,8 +103,6 @@ const fakeSigner: ResolvedSigner = {
 beforeEach(() => {
     publishTx.mockClear();
     publishTx.mockImplementation(async () => ({ ok: true, txHash: "0xdead" }));
-    publishDevTx.mockClear();
-    publishDevTx.mockImplementation(async () => ({ ok: true, txHash: "0xfeed" }));
     captureWarningMock.mockClear();
     withSpanMock.mockClear();
     getBulletinAllowanceSignerMock.mockClear();
@@ -114,9 +110,12 @@ beforeEach(() => {
     vi.mocked(submitAndWatch).mockClear();
     vi.mocked(submitAndWatch).mockResolvedValue({
         ok: true,
-        txHash: "0x0",
-        block: { hash: "0x0", number: 0, index: 0 },
-        events: [],
+        value: {
+            txHash: "0x0",
+            ok: true,
+            block: { hash: "0x0", number: 0, index: 0 },
+            events: [],
+        },
     });
 });
 
@@ -522,7 +521,6 @@ describe("publishToPlayground", () => {
                 false,
                 false,
             );
-            expect(publishDevTx).not.toHaveBeenCalled();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -584,7 +582,7 @@ describe("publishToPlayground", () => {
         }
     });
 
-    it("passes claimedOwnerH160 through as the registry.publishDev owner argument", async () => {
+    it("passes claimedOwnerH160 through as the dev-signer publish owner argument", async () => {
         await publishToPlayground({
             domain: "claimed-app",
             publishSigner: fakeSigner,
@@ -593,8 +591,7 @@ describe("publishToPlayground", () => {
             claimedOwnerH160: "0x1234567890abcdef1234567890abcdef12345678",
             isDevSigner: true,
         });
-        expect(publishTx).not.toHaveBeenCalled();
-        expect(publishDevTx).toHaveBeenCalledWith(
+        expect(publishTx).toHaveBeenCalledWith(
             "claimed-app.dot",
             "bafymeta",
             1,
@@ -604,6 +601,7 @@ describe("publishToPlayground", () => {
             },
             "",
             false,
+            true,
         );
     });
 
@@ -629,7 +627,7 @@ describe("publishToPlayground", () => {
         );
     });
 
-    it("routes dev signer publishes through registry.publishDev", async () => {
+    it("routes dev signer publishes through publish with is_dev_signer=true", async () => {
         await publishToPlayground({
             domain: "modded-by-dev",
             publishSigner: fakeSigner,
@@ -638,8 +636,7 @@ describe("publishToPlayground", () => {
             isModdable: true,
             isDevSigner: true,
         });
-        expect(publishTx).not.toHaveBeenCalled();
-        expect(publishDevTx).toHaveBeenCalledWith(
+        expect(publishTx).toHaveBeenCalledWith(
             "modded-by-dev.dot",
             "bafymeta",
             1,
@@ -648,6 +645,7 @@ describe("publishToPlayground", () => {
                 value: "0x0000000000000000000000000000000000000000",
             },
             "",
+            true,
             true,
         );
     });
@@ -868,13 +866,22 @@ describe("publishToPlayground", () => {
     });
 
     it("re-checks Bulletin allowance once when metadata upload fails with Invalid Payment", async () => {
+        // tx@0.3 surfaces the Invalid-Payment failure on the `err` channel
+        // instead of rejecting; `unwrapTx` re-throws it, so the retry path is
+        // driven exactly as before.
         vi.mocked(submitAndWatch)
-            .mockRejectedValueOnce(new Error('{"type":"Invalid","value":{"type":"Payment"}}'))
+            .mockResolvedValueOnce({
+                ok: false,
+                error: new Error('{"type":"Invalid","value":{"type":"Payment"}}'),
+            } as Awaited<ReturnType<typeof submitAndWatch>>)
             .mockResolvedValueOnce({
                 ok: true,
-                txHash: "0x1",
-                block: { hash: "0x1", number: 1, index: 0 },
-                events: [],
+                value: {
+                    txHash: "0x1",
+                    ok: true,
+                    block: { hash: "0x1", number: 1, index: 0 },
+                    events: [],
+                },
             });
 
         await publishToPlayground({
@@ -902,4 +909,22 @@ describe("publishToPlayground", () => {
             }),
         ).rejects.toThrow(/unauthorized/);
     }, 30_000);
+
+    it("fails fast on a deterministic contract revert — surfaces the reason, no retries", async () => {
+        // A revert (decoded `.reason`) is deterministic; the retry loop must NOT
+        // burn 3 attempts on it. publishTx is called exactly once and the reason
+        // is surfaced verbatim.
+        publishTx.mockReset();
+        publishTx.mockResolvedValue({ ok: false, error: { reason: "NotRevealed" } } as any);
+
+        await expect(
+            publishToPlayground({
+                domain: "reverts",
+                publishSigner: fakeSigner,
+                repositoryUrl: null,
+                cwd: "/definitely/not/a/repo",
+            }),
+        ).rejects.toThrow(/reverted: NotRevealed/);
+        expect(publishTx).toHaveBeenCalledTimes(1);
+    });
 });

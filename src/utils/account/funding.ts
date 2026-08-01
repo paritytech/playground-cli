@@ -28,6 +28,7 @@
 
 import { Enum } from "polkadot-api";
 import { submitAndWatch } from "@parity/product-sdk-tx";
+import { unwrapResult } from "../tx.js";
 import type { PaseoClient } from "../connection.js";
 import { FUNDER_CHAIN, type Funder } from "./funder.js";
 import { AllFundersExhaustedError } from "./errors.js";
@@ -97,11 +98,13 @@ export async function ensureFunded(
         );
     }
 
-    await submitAndWatch(
-        client.assetHub.tx.Balances.transfer_keep_alive({
-            dest: Enum("Id", address),
-            value: fundAmount,
-        }),
-        funder.signer,
+    unwrapResult(
+        await submitAndWatch(
+            client.assetHub.tx.Balances.transfer_keep_alive({
+                dest: Enum("Id", address),
+                value: fundAmount,
+            }),
+            funder.signer,
+        ),
     );
 }

@@ -34,10 +34,6 @@ vi.mock("@parity/product-sdk-descriptors/paseo-asset-hub", () => ({
     paseo_asset_hub: { genesis: "0xasset" },
 }));
 
-vi.mock("@parity/product-sdk-descriptors/summit-asset-hub", () => ({
-    summit_asset_hub: { genesis: "0xsummit-asset" },
-}));
-
 vi.mock("./contractManifest.js", () => ({
     PLAYGROUND_REGISTRY_CONTRACT: "@w3s/playground-registry",
     suppressReviveTraceNoise: (contract: unknown) => contract,
@@ -53,8 +49,7 @@ import { getRegistryContract, getReadOnlyRegistryContract } from "./registry.js"
 const READ_ONLY_ORIGIN = "5EYCAe5ijiYfhaAUBd6H9WGRTsvwFFc7GnhQkiHvBYxdvpbV";
 const cfg = getChainConfig();
 const EXPECTED_CDM_REGISTRY = getRegistryAddress(cfg.cdmEnvName);
-const EXPECTED_ASSET_DESCRIPTOR =
-    cfg.env === "summit" ? { genesis: "0xsummit-asset" } : { genesis: "0xasset" };
+const EXPECTED_ASSET_DESCRIPTOR = { genesis: "0xasset" };
 
 const fakeSigner: ResolvedSigner = {
     signer: {} as any,
@@ -67,7 +62,8 @@ beforeEach(() => {
     fromLiveClientMock.mockReset();
     getContractMock.mockReset();
     getContractMock.mockReturnValue({ publish: { tx: vi.fn() } });
-    fromLiveClientMock.mockResolvedValue({ getContract: getContractMock });
+    // contracts@0.9 `fromLiveClient` resolves a `Result<ContractManager, …>`.
+    fromLiveClientMock.mockResolvedValue({ ok: true, value: { getContract: getContractMock } });
 });
 
 describe("getRegistryContract", () => {
