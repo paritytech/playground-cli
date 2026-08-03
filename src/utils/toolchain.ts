@@ -102,6 +102,65 @@ export function isIpfsMigrationError(err: unknown): boolean {
 }
 
 /**
+ * True when an error is cdm-builder's raw `cargo metadata` failure. cdm-builder
+ * (`getCargoMetadata`) shells out to `cargo metadata --format-version 1
+ * --manifest-path <…> --no-deps` and rethrows execSync's bare `Command failed:
+ * cargo metadata …` on any non-zero exit — a missing/partial Rust toolchain, an
+ * unfetched git dependency (the CDM / pvm-contract crates resolve over the
+ * network), or a malformed Cargo.toml. We match the stable `cargo metadata`
+ * fragment case-insensitively so the surrounding `Command failed: …` prefix and
+ * cargo's stderr can vary.
+ *
+ * Single source of truth for the marker, shared with the deploy-time remap
+ * (`contract.ts` / `contractDeployUi.tsx` via `remapCargoMetadataError`).
+ */
+export function isCargoMetadataError(err: unknown): boolean {
+    return /cargo metadata/i.test(err instanceof Error ? err.message : String(err));
+}
+
+/**
+ * Actionable replacement for cdm-builder's raw `Command failed: cargo metadata …`
+ * dump (issue #396). The failure means `cargo metadata` could not read the
+ * contract workspace — usually a missing Rust toolchain, an unfetched git
+ * dependency (the CDM / pvm-contract crates resolve over the network), or a
+ * malformed Cargo.toml. We point at the concrete remedies instead of echoing
+ * the bare command.
+ */
+export const CARGO_METADATA_MESSAGE =
+    "Couldn't read the contract workspace: `cargo metadata` failed. Check that Rust is " +
+    "installed (run `playground login` to set up the toolchain), that you're online so the " +
+    "CDM/pvm-contract git dependencies can be fetched, and that each contract's Cargo.toml is " +
+    "valid, then try again.";
+
+/**
+ * Pull cargo's own diagnostic out of cdm-builder's execSync failure so the
+ * actionable message keeps the specifics (e.g. `Cargo.toml:21:6 key with no
+ * value`) that actually let the user fix a malformed manifest. Prefer `.stderr`
+ * (cargo's clean output) over `.message`, which prefixes the noisy
+ * `Command failed: cargo metadata …` command echo.
+ */
+function cargoErrorDetail(err: unknown): string {
+    if (typeof err !== "object" || err === null) return "";
+    const e = err as { stderr?: unknown; message?: unknown };
+    if (typeof e.stderr === "string" && e.stderr.trim()) return e.stderr.trim();
+    return typeof e.message === "string" ? e.message.trim() : "";
+}
+
+/**
+ * Replace cdm-builder's cryptic `Command failed: cargo metadata …` with an
+ * actionable instruction that still surfaces cargo's own diagnostic (so a
+ * malformed Cargo.toml keeps its file/line). Non-cargo-metadata errors pass
+ * through unchanged; the raw error stays reachable via `.cause`.
+ */
+export function remapCargoMetadataError(err: unknown): unknown {
+    if (!isCargoMetadataError(err)) return err;
+    const detail = cargoErrorDetail(err);
+    return new Error(detail ? `${CARGO_METADATA_MESSAGE}\n\n${detail}` : CARGO_METADATA_MESSAGE, {
+        cause: err,
+    });
+}
+
+/**
  * Detect a stale Kubo repo that the installed `ipfs` binary refuses to use
  * until it's migrated to the current on-disk format. Kubo stamps `~/.ipfs`
  * with a repo version; when the binary is newer than the repo (e.g. the user
