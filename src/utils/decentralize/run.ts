@@ -35,6 +35,7 @@ import type { DeployLogEvent } from "../deploy/progress.js";
 import {
     type DeployApproval,
     DEV_PUBLISH_ADDRESS,
+    isKnownDevPublishSigner,
     resolveSignerSetup,
     resolveStorageSignerOptions,
     type SignerMode,
@@ -333,7 +334,11 @@ export async function runDecentralize(
                 env,
                 isPrivate: false,
                 isModdable: repositoryUrl !== null,
-                isDevSigner: setup.publishSigner.source === "dev",
+                // Route by on-chain identity, not by `--suri` provenance —
+                // same rule as deploy/run.ts: only the contract's known dev
+                // signers may `publishDev`; any other local key publishes as
+                // a (reveal-gated) user.
+                isDevSigner: isKnownDevPublishSigner(setup.publishSigner),
                 onLogEvent: (event) => onEvent?.({ kind: "playground-event", event }),
                 onAllowancePrompt: allowancePrompt,
             });

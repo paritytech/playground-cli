@@ -19,8 +19,8 @@ import { Command } from "commander";
 import { existsSync } from "node:fs";
 import { withSpan } from "../../telemetry.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
-import { getReadOnlyRegistryContract } from "../../utils/registry.js";
-import type { IdentityRegistry } from "../../utils/identity/identityGate.js";
+import { getReadOnlyPlaygroundContracts, queryMetadataUri } from "../../utils/registry.js";
+import type { IdentitySpine } from "../../utils/identity/identityGate.js";
 import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import { AppBrowser, type AppEntry } from "./AppBrowser.js";
 import { SetupScreen } from "./SetupScreen.js";
@@ -45,7 +45,7 @@ export const modCommand = new Command("mod")
     .argument("[domain]", "App domain (interactive picker if omitted)")
     // --suri is retained as a no-op for backcompat. `playground mod` is fully
     // read-only on the chain side now (browse + metadata lookups go through
-    // getReadOnlyRegistryContract with the keyless pallet-revive dry-run
+    // getReadOnlyPlaygroundContracts with the keyless pallet-revive dry-run
     // origin), so there's no signer to feed.
     .option("--suri <suri>", "(deprecated, no-op) Signer secret URI")
     .action(async (rawDomain: string | undefined, _opts: { suri?: string }) =>
@@ -57,17 +57,19 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
         const client = await withSpan("cli.mod.connection", "connect to registry chain", () =>
             getConnection(),
         );
-        const registry = await withSpan("cli.mod.registry", "load registry contract", () =>
-            getReadOnlyRegistryContract(client.raw.assetHub),
+        const { registry, identity } = await withSpan(
+            "cli.mod.registry",
+            "load playground contracts",
+            () => getReadOnlyPlaygroundContracts(client.raw.assetHub),
         );
 
         // Builder-identity gate: modding is reserved for revealed builders who
         // joined the competition. This also gates `playground init`, which
-        // delegates here. Reuse the registry we just resolved so the gate
+        // delegates here. Reuse the spine handle we just resolved so the gate
         // doesn't re-resolve it. Blocked is a soft outcome (yellow box, exit 0).
-        if (
-            await enforceIdentityGate(client.raw.assetHub, registry as unknown as IdentityRegistry)
-        ) {
+        // The cast is the codegen seam (CI typechecks without the gitignored
+        // .cdm augmentation) — see IdentitySpine's doc comment.
+        if (await enforceIdentityGate(client.raw.assetHub, identity as unknown as IdentitySpine)) {
             process.exitCode = 0;
             return;
         }
@@ -214,13 +216,8 @@ async function resolveTargetDir(args: { domain: string }): Promise<string | null
 }
 
 async function fetchAppMetadata(registry: any, domain: string): Promise<FetchedAppMetadata> {
-    const metaRes = await registry.getMetadataUri.query(domain);
-    if (!metaRes.success) {
-        throw new Error(
-            `Registry lookup for "${domain}" failed at dry-run (chain rejected the call)`,
-        );
-    }
-    const cid = metaRes.value.isSome ? metaRes.value.value : null;
+    // queryMetadataUri owns the ""-sentinel decode and dry-run error shaping.
+    const cid = await queryMetadataUri(registry, domain);
     if (!cid) throw new Error(`App "${domain}" not found in registry`);
     return await fetchBulletinJson<FetchedAppMetadata>(cid, getBulletinGateway());
 }

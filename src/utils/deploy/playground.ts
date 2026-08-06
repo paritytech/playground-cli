@@ -17,12 +17,15 @@
  * Own playground-registry publish flow.
  *
  * We upload the metadata JSON through Bulletin `TransactionStorage.store`
- * with the product-scoped RFC-0010 Bulletin allowance account, then call
- * `registry.publish(...)` (with the `is_dev_signer` flag) ourselves via
- * `getRegistryContract()`.
+ * with the product-scoped RFC-0010 Bulletin allowance account, then call the
+ * registry ourselves via `getRegistryContract()`: `publish(...)` for user
+ * (phone) publishes, `publishDev(...)` for dev-signer publishes.
  * Phone publishing is signed by the user's product account so the contract's
- * `env::caller()` matches their address. Dev publishing is signed by the dev
- * account and may pass a claimed owner for the playground-app "myApps" view.
+ * `env::caller()` matches their address; `publish` is gated by
+ * `require_revealed()` (the identity spine must report the caller verified).
+ * Dev publishing is signed by the dev account, authorized by `env::caller()`
+ * matching a known dev signer (exempt from the reveal gate), and may pass a
+ * claimed owner for the playground-app "myApps" view.
  *
  * We deliberately do NOT use `polkadot-app-deploy.deploy()` for the metadata
  * upload: `deploy()` unconditionally runs a DotNS `register()` +
@@ -40,6 +43,7 @@ import { calculateCid } from "@parity/product-sdk-cloud-storage";
 import { submitAndWatch, withRetry } from "@parity/product-sdk-tx";
 import { unwrapResult } from "../tx.js";
 import { getRegistryContract } from "../registry.js";
+import { ZERO_H160 } from "../contractManifest.js";
 import { getConnection } from "../connection.js";
 import { getChainConfig, type Env } from "../../config.js";
 import { getBulletinDescriptor } from "../descriptors.js";
@@ -75,7 +79,12 @@ const REGISTRY_RETRY_DELAY_MS = 6_000;
  * appear while a DotNS reveal propagates across nodes right after the dotns step
  * — exclude it from `deterministic` here rather than dropping fail-fast wholesale.
  */
-function classifyRevert(error: unknown): { deterministic: boolean; detail: string } {
+function classifyRevert(error: unknown): {
+    deterministic: boolean;
+    detail: string;
+    /** Decoded revert name (e.g. "NotRevealed") when the SDK surfaced one. */
+    reason?: string;
+} {
     const e = (typeof error === "object" && error !== null ? error : {}) as {
         reason?: unknown;
         data?: unknown;
@@ -101,7 +110,37 @@ function classifyRevert(error: unknown): { deterministic: boolean; detail: strin
     const deterministic = Boolean(
         reason || data || e.dispatchError != null || (formatted && /revert/i.test(formatted)),
     );
-    return { deterministic, detail };
+    return { deterministic, detail, reason };
+}
+
+/**
+ * Map a decoded revert to an actionable remedy. Keyed on the structured
+ * `reason` when the SDK decoded one, falling back to a substring match on the
+ * flattened detail — a revert surfacing via the `TxDispatchError` path
+ * flattens to e.g. `Revive.ContractReverted`, which carries no reason name,
+ * so the fallback can't be the only mechanism (nor can it be dropped).
+ */
+function revertHint(reason: string | undefined, detail: string, isDevSigner: boolean): string {
+    const matches = (name: string) =>
+        reason === name || detail.toLowerCase().includes(name.toLowerCase());
+    if (matches("NotRevealed")) {
+        // The identity gate normally blocks before we get here, so this covers
+        // races (a reveal still propagating), `--suri` keys the session-based
+        // gate can't vouch for, and a registry whose verifier isn't wired yet.
+        return (
+            " — the signing account is not revealed as a builder in the identity" +
+            ' spine. Open the playground app and complete the "Become a builder"' +
+            " flow for this account, then retry."
+        );
+    }
+    if (matches("Unauthorized")) {
+        return isDevSigner
+            ? " — publishDev is restricted to the registry's known dev signers," +
+                  " and dev mode can only re-publish apps first published from dev" +
+                  " mode; check the signing account and the domain's current owner."
+            : " — this domain was already published by a different account.";
+    }
+    return "";
 }
 
 /** Thrown for a deterministic contract revert so the retry loop can fail fast. */
@@ -114,17 +153,21 @@ export interface PublishToPlaygroundOptions {
      * Signer that submits the registry publish tx. In phone mode this is the
      * user's session signer and calls `publish(...)` (caller becomes owner).
      * In dev mode this is a dev signer (Alice / `--suri`) and calls
-     * `publish(...)` with `is_dev_signer: true`; `claimedOwnerH160` carries the
-     * H160 to record as owner.
+     * `publishDev(...)`; `claimedOwnerH160` carries the H160 to record as
+     * owner.
      */
     publishSigner: ResolvedSigner;
     /**
      * Optional H160 to record as the app owner via the contract's `owner`
      * parameter. Used by dev mode + active session so the app shows in the
      * user's MyApps view even though the tx is signed by Alice. `null` or
-     * omitted ⇒ contract defaults to caller (`publishSigner.address`
-     * translated to H160), which is correct for phone mode and pure-dev
-     * throwaway.
+     * omitted ⇒ we pass the zero address (the ABI has no Option shape; the
+     * zero H160 is the "none" sentinel) and the contract records
+     * `env::caller()` as owner, which is correct for phone mode and pure-dev
+     * throwaway. Valid ONLY together with `isDevSigner` — the contract honors
+     * the override only on publishDev (a user publish with owner ≠ caller
+     * reverts `OwnerOverrideForbidden`), so `publishToPlayground` rejects the
+     * combination synchronously.
      */
     claimedOwnerH160?: `0x${string}` | null;
     /** Repository URL to record in metadata. `null` = omit the field entirely. */
@@ -181,9 +224,12 @@ export interface PublishToPlaygroundOptions {
     moddedFrom?: string;
     /**
      * True when the publish is signed by the dev signer (Alice / `--suri`)
-     * rather than the user's session. Dev publishes set the ungated
-     * `is_dev_signer` flag on `publish(...)`, which records the app without
-     * awarding deploy XP or source-app mod XP.
+     * rather than the user's session. Dev publishes go through the separate
+     * `publishDev(...)` method — authorized on-chain by `env::caller()`
+     * matching a known dev signer (NOT a calldata flag) and exempt from the
+     * reveal gate — which records the app without awarding deploy XP or
+     * source-app mod XP. (`publish` still carries a trailing `is_dev_signer`
+     * boolean for ABI compatibility, but the contract ignores it.)
      */
     isDevSigner?: boolean;
 }
@@ -354,6 +400,20 @@ export function readModdedFrom(cwd: string): string | null {
 export async function publishToPlayground(
     options: PublishToPlaygroundOptions,
 ): Promise<PublishToPlaygroundResult> {
+    // Validate the owner-override combination BEFORE any on-chain work: the
+    // registry honors `claimedOwnerH160` only on publishDev — a user publish
+    // with owner ≠ caller reverts OwnerOverrideForbidden, and by then the
+    // metadata upload has already been paid for. Fail at the API boundary
+    // instead (this surface is consumed by SDK callers like RevX, not just
+    // our own deploy pipelines).
+    if (options.claimedOwnerH160 && !options.isDevSigner) {
+        throw new Error(
+            "claimedOwnerH160 requires isDevSigner: the registry honors an owner " +
+                "override only on publishDev — a user publish always records " +
+                "env::caller() as owner (pass claimedOwnerH160: null).",
+        );
+    }
+
     const { label, fullDomain } = normalizeDomain(options.domain);
 
     const readme = options.cwd ? readReadme(options.cwd) : null;
@@ -449,15 +509,12 @@ export async function publishToPlayground(
         "publish playground registry entry",
         { "cli.deploy.domain": fullDomain },
         async () => {
-            // Encode the Option<Address> owner parameter. None ⇒ contract
-            // defaults to env::caller(). Some(h160) ⇒ recorded as the app
-            // owner regardless of who signed the tx.
-            const owner = options.claimedOwnerH160
-                ? { isSome: true as const, value: options.claimedOwnerH160 }
-                : {
-                      isSome: false as const,
-                      value: "0x0000000000000000000000000000000000000000" as const,
-                  };
+            // The `owner` parameter is a plain Address (the ABI has no Option
+            // shape). Zero address (ZERO_H160) ⇒ contract records
+            // env::caller() as owner. Non-zero h160 ⇒ recorded as the app
+            // owner regardless of who signed the tx (dev path only — the
+            // combination with a user publish was rejected at function entry).
+            const owner = options.claimedOwnerH160 ?? ZERO_H160;
 
             let lastError: unknown;
             for (let attempt = 1; attempt <= MAX_REGISTRY_RETRIES; attempt++) {
@@ -469,29 +526,38 @@ export async function publishToPlayground(
                     // argument, so an empty string records no lineage edge.
                     const moddedFromArg = moddedFrom ?? "";
                     const isModdable = options.isModdable ?? false;
-                    const isDevSigner = options.isDevSigner ?? false;
-                    // contracts@0.9 dropped the separate `publishDev` method:
-                    // the dev-signer path is now the same `publish` call with
-                    // the trailing `is_dev_signer` boolean set. `true` records
-                    // the app without awarding mod XP (the former `publishDev`
-                    // behaviour); `false` is the normal user publish.
-                    const result = await registry.publish.tx(
+                    // Dev publishes MUST go through the separate `publishDev`
+                    // method: `publish` is gated fail-closed by
+                    // `require_revealed()` (the dev signer is never revealed
+                    // in the identity spine, so it would revert `NotRevealed`)
+                    // and ignores its trailing `is_dev_signer` boolean — the
+                    // dev path is authorized by `env::caller()` matching a
+                    // known dev signer, not by calldata. The flag stays on the
+                    // `publish` ABI for compatibility only; pass `false`.
+                    // Both methods share the first six args — keep them in one
+                    // tuple so an arg-order edit can't silently diverge per
+                    // branch.
+                    const args = [
                         fullDomain,
                         metadataCid,
                         visibility,
                         owner,
                         moddedFromArg,
                         isModdable,
-                        isDevSigner,
-                    );
+                    ] as const;
+                    const result = options.isDevSigner
+                        ? await registry.publishDev.tx(...args)
+                        : await registry.publish.tx(...args, false);
                     if (!result.ok) {
-                        const { deterministic, detail } = classifyRevert(result.error);
+                        const { deterministic, detail, reason } = classifyRevert(result.error);
                         const cause = result.error instanceof Error ? result.error : undefined;
                         if (deterministic) {
-                            // Deterministic — surface immediately; retrying the
-                            // identical tx would revert the same way.
+                            // Deterministic — surface immediately with a
+                            // remedy; retrying the identical tx would revert
+                            // the same way.
+                            const hint = revertHint(reason, detail, options.isDevSigner ?? false);
                             throw new RegistryPublishRevertError(
-                                `Registry publish transaction reverted: ${detail}`,
+                                `Registry publish transaction reverted: ${detail}${hint}`,
                                 { cause },
                             );
                         }

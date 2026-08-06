@@ -28,7 +28,7 @@ import { parseArgs } from "node:util";
 import { destroyConnection } from "../src/utils/connection.js";
 import { checkAllowance, ensureAllowance } from "../src/utils/account/allowance.js";
 import { publishToPlayground, normalizeDomain } from "../src/utils/deploy/playground.js";
-import { getReadOnlyRegistryContract } from "../src/utils/registry.js";
+import { getReadOnlyRegistryContract, queryMetadataUri } from "../src/utils/registry.js";
 import { resolveSigner } from "../src/utils/signer.js";
 import { SIGNER, E2E_DOMAINS } from "../e2e/cli/fixtures/accounts.js";
 import { destroyTestClient, getTestClient } from "../e2e/cli/helpers/chain.js";
@@ -147,9 +147,13 @@ async function verifyRegistryEntry(domain: string, metadataCid: string): Promise
 	const registry = await getReadOnlyRegistryContract(client.raw.assetHub);
 
 	for (let attempt = 1; attempt <= REGISTRY_READBACK_ATTEMPTS; attempt++) {
-		const result = await registry.getMetadataUri.query(domain);
-		const value = result.value as { isSome?: boolean; value?: string } | undefined;
-		if (result.success && value?.isSome && value.value === metadataCid) return;
+		// queryMetadataUri owns the ""-sentinel decode; a rejected dry-run
+		// throws, which we treat like "not visible yet" and retry.
+		try {
+			if ((await queryMetadataUri(registry, domain)) === metadataCid) return;
+		} catch {
+			/* retry below */
+		}
 
 		if (attempt < REGISTRY_READBACK_ATTEMPTS) await delay(REGISTRY_READBACK_DELAY_MS);
 	}

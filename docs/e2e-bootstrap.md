@@ -23,6 +23,18 @@ SIGNER must hold enough PAS to cover `registry.publish()` fees.
 the bootstrap tool (`tools/register-e2e-fixtures.ts`) does the same before registering fixtures.
 Minimum held: 500 PAS. Top-up amount: 1000 PAS. Cost per publish: ~0.1 PAS.
 
+**Identity-spine reveal (required since the registry/identity-spine migration).**
+`registry.publish()` is gated fail-closed by `require_revealed()`: the caller's H160 must be
+verified in the `@w3s/playground-identity` spine or every publish reverts `NotRevealed`.
+SIGNER is neither of the registry's compiled-in dev signers (so it cannot use `publishDev`)
+and, as a bare local key with no phone session, cannot use the playground-app "Become a
+builder" flow — it must be seeded ONCE per spine deployment by a spine admin/sudo:
+`admin_set_identity(<SIGNER H160>, <any root pubkey>)` (or `import_identities`). SIGNER's
+H160 is printed by `tools/register-e2e-fixtures.ts` and derivable from the mnemonic above.
+Until this is done, `ensureTemplateRegistered`, `tools/register-e2e-fixtures.ts`, and every
+publish e2e leg fail at registry publish with `NotRevealed`. Re-seed after any spine
+redeploy/wipe (same class of event as "Registry contract redeployed" below).
+
 ### Permanent fixture domains
 
 Two categories. All owned by SIGNER after bootstrap.

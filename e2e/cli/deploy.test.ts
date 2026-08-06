@@ -210,17 +210,18 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		}
 	});
 
-	// The dev-mode + active-session flow (Alice signs the publish tx but the
-	// session's H160 is passed as the `owner` arg via Option<Address>) is the
-	// headline behaviour of the fully-dev-deploy change. We can't e2e-test
+	// The dev-mode + active-session flow (the dev signer signs the publish tx
+	// but the session's H160 is passed as the plain-`Address` `owner` arg —
+	// zero address = none; the override is honored only on `publishDev`) is
+	// the headline behaviour of the fully-dev-deploy change. We can't e2e-test
 	// it here because spinning up a real Polkadot-app SSO session against
 	// Paseo would require running the mobile app or replicating its session-
 	// pairing handshake against the live SSO endpoint. The unit-level coverage
 	// lives in run.test.ts ("dev mode with playground: ZERO planned approvals
 	// AND user H160 is claimed as owner") which asserts the publishToPlayground
 	// call is dispatched with the right `claimedOwnerH160`, and in
-	// playground.test.ts which asserts the registry.publish.tx receives the
-	// right Option<Address> tuple. Skip-gated contract tests in playground-app
+	// playground.test.ts which asserts registry.publishDev.tx receives the
+	// claimed owner as a plain address. Skip-gated contract tests in playground-app
 	// (tests/contract/registry.test.ts "publish with owner=Some(...)") will
 	// close the on-chain end of this once the local revive-dev-node wiring
 	// lands. See docs/superpowers/specs/2026-05-20-fully-dev-deploy-design.md.

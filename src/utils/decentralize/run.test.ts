@@ -75,6 +75,8 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
     requestResourceAllocation: vi.fn(),
 }));
 import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { ss58Encode } from "@parity/product-sdk-address";
+import { seedToAccount } from "@parity/product-sdk-keys";
 import type { ResolvedSigner } from "../signer.js";
 import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 import type { DecentralizeLogEvent } from "./run.js";
@@ -274,6 +276,47 @@ describe("runDecentralize — playground publish metadata", () => {
         expect(arg.repositoryUrl).toBeNull();
         expect(arg.isModdable).toBe(false);
         expect(arg.cwd).toBe("./dist/__repo_root__");
+    });
+
+    it("routes publishes by on-chain identity, not --suri provenance (mirrors deploy/run.ts)", async () => {
+        // Dev mode with no explicit signer: the publish signer is the
+        // bare-root dev account, which IS a contract dev signer → publishDev.
+        await runDecentralize({
+            source: { kind: "path", directory: "./dist" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: null,
+            publishToPlayground: true,
+            env: "paseo-next-v2",
+        });
+        const devArg = publishToPlaygroundMock.mock.calls[0][0] as { isDevSigner?: boolean };
+        expect(devArg.isDevSigner).toBe(true);
+
+        publishToPlaygroundMock.mockClear();
+
+        // An arbitrary --suri key resolves as source "dev" but its H160 is
+        // NOT a known dev signer: it must publish as a reveal-gated user
+        // (isDevSigner=false) — routing it through publishDev would revert
+        // Unauthorized on-chain.
+        const suriAccount = seedToAccount(DEFAULT_MNEMONIC, "//e2e-deployer");
+        const arbitrarySuri: ResolvedSigner = {
+            signer: suriAccount.signer,
+            address: ss58Encode(suriAccount.publicKey),
+            source: "dev",
+            destroy: vi.fn(),
+        };
+        await runDecentralize({
+            source: { kind: "path", directory: "./dist" },
+            label: "my-site",
+            fullDomain: "my-site.dot",
+            mode: "dev",
+            userSigner: arbitrarySuri,
+            publishToPlayground: true,
+            env: "paseo-next-v2",
+        });
+        const suriArg = publishToPlaygroundMock.mock.calls[0][0] as { isDevSigner?: boolean };
+        expect(suriArg.isDevSigner).toBe(false);
     });
 
     it("url source records no repository, no moddable bit, and no project root", async () => {

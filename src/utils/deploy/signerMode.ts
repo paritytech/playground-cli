@@ -48,10 +48,11 @@
  */
 
 import { DEFAULT_MNEMONIC, type DeployOptions } from "@parity/polkadot-app-deploy";
-import { ss58Encode } from "@parity/product-sdk-address";
+import { ss58Encode, ss58ToH160 } from "@parity/product-sdk-address";
 import type { CloudStorageApi } from "@parity/product-sdk-cloud-storage";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import { getBulletinAllowanceSigner, type AllowancePrompt } from "../allowances/bulletin.js";
+import { KNOWN_DEV_SIGNER_H160S } from "../contractManifest.js";
 import type { ResolvedSigner } from "../signer.js";
 import type { DeployPlan } from "./availability.js";
 
@@ -100,6 +101,29 @@ export function createDevPublishSigner(): ResolvedSigner {
 }
 
 export type SignerMode = "dev" | "phone";
+
+/**
+ * Whether a resolved publish signer is one of the registry contract's
+ * KNOWN dev signers — the only callers `publishDev(...)` authorizes
+ * (`env::caller()` must match; the old calldata `is_dev_signer` flag is
+ * ignored by the contract).
+ *
+ * This deliberately keys on the signer's on-chain identity, NOT on
+ * `source === "dev"`: any `--suri` key resolves as source "dev", but an
+ * arbitrary suri account (e.g. the dedicated e2e deployer) is NOT a contract
+ * dev signer — it must publish through the normal reveal-gated `publish(...)`
+ * as a revealed builder. Routing it through `publishDev` would revert
+ * `Unauthorized`; routing a real dev signer through `publish` would revert
+ * `NotRevealed`.
+ */
+export function isKnownDevPublishSigner(signer: ResolvedSigner): boolean {
+    if (signer.source !== "dev") return false;
+    try {
+        return KNOWN_DEV_SIGNER_H160S.has(ss58ToH160(signer.address).toLowerCase());
+    } catch {
+        return false;
+    }
+}
 
 /**
  * The SS58 address that will own and sign a deploy's DotNS name, by mode:

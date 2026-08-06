@@ -22,21 +22,27 @@
  * flow. Anonymous accounts earn no competition points, so the CLI refuses to
  * act for them.
  *
- * "Revealed" is decided exactly as the playground-app decides it
- * (`hasRevealedIdentity`): `playground-registry.getRootAccount(productH160)`
- * returns a NON-zero bytes32. The contract `unwrap_or`s a missing binding to 32
- * zero bytes and never reverts, so the zero sentinel IS the "anonymous" answer.
+ * "Revealed" is decided by the identity spine (`@w3s/playground-identity`):
+ * `isVerified(productH160)` returns true. This is the EXACT predicate the
+ * registry's fail-closed publish gate (`require_revealed`) delegates to
+ * on-chain, so for PHONE-mode publishes (where the session's product account
+ * IS `env::caller()`) the gate's verdict predicts scored-publish success
+ * precisely. In `--suri` mode it does NOT: the gate still checks the
+ * session's product H160 while the chain checks the suri key's H160, so a
+ * revealed session + unrevealed suri key passes here and reverts NotRevealed
+ * at publish (and vice versa). The spine `unwrap_or`s a missing binding to
+ * false and never reverts, so `false` IS the "anonymous" answer.
  *
  * This module is pure logic (no React/Ink). The session's product H160 is
  * derived signer-free from the persisted login (`findSession` ->
  * `deriveSessionAddresses`), and the read uses the keyless revive origin
- * (`getReadOnlyRegistryContract`), so evaluating the gate needs neither a phone
- * tap nor a mapped/funded account.
+ * (`getReadOnlyIdentityContract`), so evaluating the gate needs neither a
+ * phone tap nor a mapped/funded account.
  */
 
 import type { PolkadotClient } from "polkadot-api";
 import { findSession, deriveSessionAddresses } from "../auth.js";
-import { getReadOnlyRegistryContract } from "../registry.js";
+import { getReadOnlyIdentityContract } from "../registry.js";
 
 export type IdentityGateResult =
     | { status: "revealed"; productH160: `0x${string}` }
@@ -47,20 +53,28 @@ export type IdentityGateResult =
 /** Blocked outcomes — everything except `revealed`. */
 export type BlockedIdentityStatus = "not-logged-in" | "anonymous" | "unverifiable";
 
-interface RootQueryResult {
+interface VerifiedQueryResult {
     success: boolean;
     value?: unknown;
 }
 
 /**
- * Minimal structural view of the registry handle. `getReadOnlyRegistryContract`
- * returns a runtime Proxy (via `suppressReviveTraceNoise`) whose full typing we
- * don't want to depend on here. The generated ABI does expose `getRootAccount`
- * (`.cdm/contracts.d.ts`, `response: SizedHex<32>` — i.e. a hex string); we
- * narrow to just the one read method we call.
+ * Minimal structural view of the identity-spine handle.
+ * `getReadOnlyIdentityContract` returns a runtime Proxy (via
+ * `suppressReviveTraceNoise`) whose full typing we don't want to depend on
+ * here. The generated ABI does expose `isVerified` (`.cdm/contracts.d.ts`,
+ * `response: boolean`); we narrow to just the one read method we call.
+ *
+ * NOTE on the `as unknown as IdentitySpine` seam below: it looks removable
+ * (locally the `.cdm` augmentation makes the handle structurally assignable
+ * with no cast) but is NOT — `.cdm` is gitignored and CI typechecks without
+ * it, where `getContract` returns the un-augmented `Contract<ContractDef>`,
+ * whose string-index methods satisfy property ACCESS but not structural
+ * ASSIGNABILITY. Compile-time drift protection therefore can't exist in CI;
+ * the real guard is queryVerified's runtime AbiDriftError.
  */
-export interface IdentityRegistry {
-    getRootAccount: { query(account: `0x${string}`): Promise<RootQueryResult> };
+export interface IdentitySpine {
+    isVerified: { query(account: `0x${string}`): Promise<VerifiedQueryResult> };
 }
 
 interface GateOptions {
@@ -69,51 +83,51 @@ interface GateOptions {
     /** Delay between retries in ms. Defaults to 250. */
     delayMs?: number;
     /**
-     * Pre-resolved registry handle. Callers that already built one (e.g. `mod`)
-     * pass it to avoid a second meta-registry resolution + Revive dry-run. When
-     * omitted, the gate resolves its own from `rawAssetHubClient`.
+     * Pre-resolved identity-spine handle. Callers that already built one (e.g.
+     * `mod`) pass it to avoid a second meta-registry resolution + Revive
+     * dry-run. When omitted, the gate resolves its own from
+     * `rawAssetHubClient`.
      */
-    registry?: IdentityRegistry;
+    identity?: IdentitySpine;
 }
 
 function describe(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
 }
 
+/** Deterministic bundled-ABI vs live-contract mismatch — retrying can't help. */
+class AbiDriftError extends Error {}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Whether a `getRootAccount` result represents an anonymous (unbound) account.
- *
- * Robust to the representations a bytes32 contract output can arrive as: a
- * `0x`-prefixed (or bare) hex string, a `Uint8Array`/number array, or
- * null/undefined (treated as anonymous). Throws on anything unrecognized so the
- * orchestrator degrades to `unverifiable` rather than guessing.
- */
-export function isAnonymousRoot(value: unknown): boolean {
-    if (value === null || value === undefined) return true;
-    if (typeof value === "string") {
-        const hex = value.slice(0, 2).toLowerCase() === "0x" ? value.slice(2) : value;
-        return hex.length === 0 || /^0+$/.test(hex);
-    }
-    if (value instanceof Uint8Array) return value.every((b) => b === 0);
-    if (Array.isArray(value)) return value.every((b) => Number(b) === 0);
-    throw new Error(`Unrecognized root account representation: ${typeof value}`);
-}
-
-async function queryRoot(
-    registry: IdentityRegistry,
+async function queryVerified(
+    spine: IdentitySpine,
     account: `0x${string}`,
     attempts: number,
     delayMs: number,
-): Promise<unknown> {
+): Promise<boolean> {
     let lastError: unknown;
     for (let i = 0; i < attempts; i++) {
         try {
-            const res = await registry.getRootAccount.query(account);
-            if (res.success) return res.value;
-            lastError = new Error("registry.getRootAccount dry-run was rejected (success=false)");
+            const res = await spine.isVerified.query(account);
+            if (res.success) {
+                // Anything but a strict boolean means the ABI we bundle and
+                // the live contract disagree — deterministic, so fail straight
+                // to `unverifiable` upstream instead of burning the retry
+                // budget (which exists for transient RPC blips) on an answer
+                // that cannot change between attempts.
+                if (typeof res.value !== "boolean") {
+                    throw new AbiDriftError(
+                        `Unrecognized isVerified response (${typeof res.value}): ` +
+                            `${JSON.stringify(res.value)} — bundled ABI vs live contract drift?`,
+                    );
+                }
+                return res.value;
+            }
+            lastError = new Error("identity.isVerified dry-run was rejected (success=false)");
         } catch (err) {
+            // Drift is deterministic — skip the remaining retry budget.
+            if (err instanceof AbiDriftError) throw err;
             lastError = err;
         }
         if (i < attempts - 1 && delayMs > 0) await sleep(delayMs);
@@ -151,13 +165,15 @@ export async function checkIdentityGate(
     }
 
     try {
-        const registry =
-            opts.registry ??
-            ((await getReadOnlyRegistryContract(rawAssetHubClient)) as unknown as IdentityRegistry);
-        const root = await queryRoot(registry, productH160, attempts, delayMs);
-        return isAnonymousRoot(root)
-            ? { status: "anonymous", productH160 }
-            : { status: "revealed", productH160 };
+        // Codegen seam — see the IdentitySpine doc comment for why this cast
+        // must stay (CI typechecks without the gitignored .cdm augmentation).
+        const spine =
+            opts.identity ??
+            ((await getReadOnlyIdentityContract(rawAssetHubClient)) as unknown as IdentitySpine);
+        const verified = await queryVerified(spine, productH160, attempts, delayMs);
+        return verified
+            ? { status: "revealed", productH160 }
+            : { status: "anonymous", productH160 };
     } catch (err) {
         return { status: "unverifiable", detail: describe(err) };
     }
