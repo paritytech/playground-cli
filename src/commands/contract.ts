@@ -370,6 +370,20 @@ function asCdmAssetHubDescriptor(d: unknown): PipelineChainClient["descriptors"]
     return d as PipelineChainClient["descriptors"]["assetHub"];
 }
 
+// Same skew, bulletin flavour: `descriptors@0.9.0` regenerated paseo-bulletin
+// for the v0.0.22-paseo Bulletin runtime (new `DataRenewal` pallet; renew /
+// auto-renew calls moved off TransactionStorage), so our `Paseo_bulletin` no
+// longer structurally matches the older bulletin union cdm-builder's pinned
+// descriptors bake into `PipelineChainClient`. The contract pipeline only ever
+// submits `TransactionStorage.store` on bulletin, which is unchanged, so the
+// cast is runtime-safe. Delete once cdm-builder's pinned descriptors realign.
+function asCdmBulletinApi(api: unknown): PipelineChainClient["bulletin"] {
+    return api as PipelineChainClient["bulletin"];
+}
+function asCdmBulletinDescriptor(d: unknown): PipelineChainClient["descriptors"]["bulletin"] {
+    return d as PipelineChainClient["descriptors"]["bulletin"];
+}
+
 // Same family of skew: `installContracts` comes from `@parity/cdm-builder`,
 // which pins an OLDER `@parity/product-sdk-contracts` whose `Contract.tx()`
 // resolves a bare `TxResult`. Our root bumped contracts to 0.9.x, where `.tx()`
@@ -412,11 +426,11 @@ async function createContractChainClient(
 
     return {
         assetHub: asCdmAssetHubApi(raw.assetHub.getTypedApi(assetHubDescriptor)),
-        bulletin: raw.bulletin.getTypedApi(bulletinDescriptor),
+        bulletin: asCdmBulletinApi(raw.bulletin.getTypedApi(bulletinDescriptor)),
         raw,
         descriptors: {
             assetHub: asCdmAssetHubDescriptor(assetHubDescriptor),
-            bulletin: bulletinDescriptor,
+            bulletin: asCdmBulletinDescriptor(bulletinDescriptor),
         },
         destroy,
     };
