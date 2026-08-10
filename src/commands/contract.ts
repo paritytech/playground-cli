@@ -353,36 +353,6 @@ async function assertCdmPackageOwnership({
     }
 }
 
-// ── cdm-builder descriptor skew bridge ─────────────────────────────────────
-// Our root `@parity/product-sdk-descriptors` paseo-asset-hub descriptor and
-// cdm-env's `CdmDeployAssetHubDescriptor` (which `cdm-builder` generates the
-// `PipelineChainClient` type from) come from different product-sdk descriptor
-// generations, so the `DotnsGateway` pallet shape differs nominally (e.g.
-// `PopControllerAddressSet` vs `DispatcherAddressSet`). They are structurally
-// identical for the Revive + registry calls the contract pipeline actually
-// makes — it never touches DotnsGateway — so cast through these single seams.
-// Delete once the two descriptor generations realign. Sibling of the
-// `asCloudStorageApi` seam (see CLAUDE.md "cdm-builder version skew").
-function asCdmAssetHubApi(api: unknown): PipelineChainClient["assetHub"] {
-    return api as PipelineChainClient["assetHub"];
-}
-function asCdmAssetHubDescriptor(d: unknown): PipelineChainClient["descriptors"]["assetHub"] {
-    return d as PipelineChainClient["descriptors"]["assetHub"];
-}
-
-// Same family of skew: `installContracts` comes from `@parity/cdm-builder`,
-// which pins an OLDER `@parity/product-sdk-contracts` whose `Contract.tx()`
-// resolves a bare `TxResult`. Our root bumped contracts to 0.9.x, where `.tx()`
-// resolves a `Result<TxResult, …>`, so the freshly-built `registry` contract is
-// nominally unassignable to cdm-builder's `RegistryContract` param. The
-// install-time registry is query-only (no signer wired in — see `liveManager`),
-// so `.tx()` is never invoked through it and the cast is runtime-safe. Delete
-// once cdm-builder's pinned contracts version realigns with our root.
-type CdmRegistryContract = Parameters<typeof installContracts>[0]["registry"];
-function asCdmRegistryContract(contract: unknown): CdmRegistryContract {
-    return contract as CdmRegistryContract;
-}
-
 async function createContractChainClient(
     target: ContractDeployTarget,
 ): Promise<ContractChainClient> {
@@ -411,11 +381,11 @@ async function createContractChainClient(
     }
 
     return {
-        assetHub: asCdmAssetHubApi(raw.assetHub.getTypedApi(assetHubDescriptor)),
+        assetHub: raw.assetHub.getTypedApi(assetHubDescriptor),
         bulletin: raw.bulletin.getTypedApi(bulletinDescriptor),
         raw,
         descriptors: {
-            assetHub: asCdmAssetHubDescriptor(assetHubDescriptor),
+            assetHub: assetHubDescriptor,
             bulletin: bulletinDescriptor,
         },
         destroy,
@@ -698,7 +668,7 @@ export async function runContractInstall(
         const result: ContractInstallRunResult = useUi
             ? await runContractInstallWithUI({
                   libraries: requests,
-                  registry: asCdmRegistryContract(registry),
+                  registry,
                   ipfs,
                   registryAddress: target.registryAddress,
                   assethubUrl: target.assethubUrl,
@@ -706,7 +676,7 @@ export async function runContractInstall(
               })
             : await installContracts({
                   libraries: requests,
-                  registry: asCdmRegistryContract(registry),
+                  registry,
                   ipfs,
                   onEvent: runOptions.onInstallEvent,
               }).then((summary) => ({ summary, success: summary.success }));
