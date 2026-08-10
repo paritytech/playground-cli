@@ -18,14 +18,14 @@ importers:
   .:
     dependencies:
       '@parity/cdm-builder':
-        specifier: 3.2.0
-        version: 3.2.0(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+        specifier: 5.0.1
+        version: 5.0.1(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       '@parity/cdm-codegen':
-        specifier: 0.6.23
-        version: 0.6.23(@polkadot-api/ink-contracts@0.6.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+        specifier: 0.6.26
+        version: 0.6.26(@polkadot-api/ink-contracts@0.6.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       '@parity/cdm-env':
-        specifier: ^2.1.0
-        version: 2.1.0(esbuild@0.27.7)(rxjs@7.8.2)
+        specifier: ^2.4.0
+        version: 2.4.0(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/dotns-cli':
         specifier: 0.8.0
         version: 0.8.0(@polkadot/util@14.0.3)(esbuild@0.27.7)(jiti@2.7.0)(postcss@8.5.15)(react-native@0.85.2(@babel/core@7.29.7)(@types/react@18.3.28)(react@18.3.1))(rxjs@7.8.2)(typescript@5.9.3)(yaml@2.9.0)
@@ -1158,17 +1158,17 @@ packages:
       multiformats: ^13.4.1
       polkadot-api: ^2.1.2
 
-  '@parity/cdm-builder@3.2.0':
-    resolution: {integrity: sha512-o+KLJt055VjWXzn87r5/t4JIF0NNwOVY3V/f3vqtsfW39e5Zqlz7rWWxLXz3SVhpFAas3ZlmOH45uT/SvLtcBA==}
+  '@parity/cdm-builder@5.0.1':
+    resolution: {integrity: sha512-5KEnb+uesGuTSA/5aivgwk06q2rl24QLjxair2r90hbVjvhs+/TMvA+WK1PWYlivg9CTyRFCBZ5/P/cLB6QNRg==}
 
-  '@parity/cdm-codegen@0.6.23':
-    resolution: {integrity: sha512-TZ/xc6MTxpjWlamypfVJ2xftCbYn20yEEEv4VD2Amobt1CyOMCS1jRbFFGvZ0eotBfifzY/twbbCWlH9TbrkYw==}
+  '@parity/cdm-codegen@0.6.26':
+    resolution: {integrity: sha512-FroS0lSnP/21zy/+LUdxyKHuox2qnT5s8dYLSLOKkGMgUkdgDunzRSYPCfDmnW+5JCh+Cq6tqVrR1Ac6OsWJ+Q==}
 
-  '@parity/cdm-env@2.1.0':
-    resolution: {integrity: sha512-/L7PRrcZF0T93XXM6G4joNPAnA+0RxHXVmTuUWrAD2RxOe9k3oTy+2si6xZteWhlMeAFvAKktneD85curkkEOg==}
+  '@parity/cdm-env@2.4.0':
+    resolution: {integrity: sha512-JK7xHCs0zXXrkbELevbLPldabBrn1fgwWnsjociFfPe1q0yNPvZ3mtWIP0DBt6ge/I9fJGaknuW4Jhpp3NQBJQ==}
 
-  '@parity/cdm-utils@0.4.1':
-    resolution: {integrity: sha512-Da2hXGhGIvLpQoHtwjfFQ4hIG3ignf0Nf4vn4oML+JBUJ5I4KpjfLM4mt/wNwURGWa2CNCz7u7mzae1s0QuqMQ==}
+  '@parity/cdm-utils@0.5.0':
+    resolution: {integrity: sha512-5zvTk/MAnQ9mkR1Pc3GeW46e+OzEce49PqBHFaqF2+Ldcs4mDHpqkSka968VsKfIvax61khbrAfgD25qQivV/A==}
 
   '@parity/dotns-cli@0.8.0':
     resolution: {integrity: sha512-heYKfdL+hsMG6aoyIAzQVNOp5bLMnNgEZvQCLuLumnblkxqBAZrzsHDQJnOIAiuHvFNxogmx1+FPNdOS0x0UZQ==}
@@ -1186,26 +1186,14 @@ packages:
   '@parity/product-sdk-chain-client@0.10.0':
     resolution: {integrity: sha512-aiHddqjqELg0kBMLv0FkRzrxnR1FbOKe36cPxshHckETcNpwN9vYPEZyQoKl4vf5UqXaivmoIUqFiQPKaDGVEA==}
 
-  '@parity/product-sdk-chain-client@0.8.0':
-    resolution: {integrity: sha512-kDuugg/2AvzIBBeHkeOu2+5t9pOrVBdEBkIbfREffshSf7hIqYFrSOjf+GmNgJTd/yo49TL7oHqQAOSIclcxRQ==}
-
   '@parity/product-sdk-cloud-storage@0.10.0':
     resolution: {integrity: sha512-Fb/2RNCUltKnO/xBetbcURFhKEsRDSG8DotO4SQT4RZ94bic7dq3jKaJXS3tY8H6ysYgPvnJrcgtfw5pskpzeg==}
-
-  '@parity/product-sdk-cloud-storage@0.7.0':
-    resolution: {integrity: sha512-9yGAEY5JMRPC76t8cnMAkZJwT5D5isk1jpDgc3gAT3h47Ofq1WIAbtHMY4skgOuyxb5WKrZD65GvvtJIpWpslQ==}
 
   '@parity/product-sdk-contracts@0.10.1':
     resolution: {integrity: sha512-a44YjpWrLp7CkH6a5DQSD7f5fhZKz4x4GhJUoBVUCzz5q2drO+4VpwezB2hjIhvbSIwQrgrHjw8F5ZfV2b/NUA==}
 
-  '@parity/product-sdk-contracts@0.9.0':
-    resolution: {integrity: sha512-bFLvnVqRMNpHQFgdaFBDUPkDvuhbqp4CE0/P1r5OfW3XWvGtULd3iMougc54aaL9s8F1YBfNwcTIeHHTWdo2Fw==}
-
   '@parity/product-sdk-crypto@0.1.1':
     resolution: {integrity: sha512-No6AyTLw1Nv3ym8SDdXh/tnezdClNOL9pJgaciVr9Ny6hIL5rs6MQiXsP0+1bc1Nwymz5Q4FqsYg/htE4lejNg==}
-
-  '@parity/product-sdk-descriptors@0.7.0':
-    resolution: {integrity: sha512-JBo3M5+9YCzCD+OzOrcUq+nK/RYSnSpzSfP4ks67vZS+BUcpArGG4mWH4uZ2HEksrAmwMtZZH8f0k8hCEV9YSw==}
 
   '@parity/product-sdk-descriptors@0.9.0':
     resolution: {integrity: sha512-BhRsa8ZHR4nV5l4Wc+qQ3WASOOmJW0NRSYDAwv5Q4ikYGtGctZXDuqY0NQtd51y6b2e87hTDGZH8stH7k6e5UQ==}
@@ -1216,9 +1204,6 @@ packages:
   '@parity/product-sdk-host@0.10.2':
     resolution: {integrity: sha512-FtYZEMXR7jgAHosuSh7RY4ytQMsVDz//tvJVKgns0q4Wx4AoS0ITCI4Z58LqKXeRTVeOQK+4lrOGfZQtO17wzQ==}
 
-  '@parity/product-sdk-host@0.13.0':
-    resolution: {integrity: sha512-8J7xZq7voI6JF0UFwl9fcuoGStL0mivsZXGcolZQVaFPNEHmhSe+U/+XsRkELds/e8EEwpjSL4DgpKknqT6MDA==}
-
   '@parity/product-sdk-host@0.14.1':
     resolution: {integrity: sha512-PF87O0Kb35TyZo+sDlcYo9ZvaUedR8NNbcZvfBf8PBL65Yck10jIDuXE386hl9pgpgOn6o0Y1z6iJfEolhNXsg==}
 
@@ -1227,9 +1212,6 @@ packages:
 
   '@parity/product-sdk-keys@0.3.10':
     resolution: {integrity: sha512-59+WC0nFsvFMFgT2ksI9YfNCn6WunLe3/x3PtzJYax5v3xL52MnsAZKq4rRuutTLxDgXRVdufe5UHpB5dLPS0w==}
-
-  '@parity/product-sdk-keys@0.3.14':
-    resolution: {integrity: sha512-MZ0QNyYyyTrDrE07xbmHAVTEhImb8TbZBJkSKrvpjdhmphz+L3HMMVKJQxoKq4gkcWrd+psMwaMxQcLXn8HpXw==}
 
   '@parity/product-sdk-keys@0.3.16':
     resolution: {integrity: sha512-dnaHPQVOyxE7yEET/NsHi/0l8rI+vkH0m1OaZQ+qMkv4zwrFqXbhcXO7z6Kj+RHp5hswkmrcpEmjl4DeV5Z2xQ==}
@@ -1240,9 +1222,6 @@ packages:
   '@parity/product-sdk-local-storage@0.2.9':
     resolution: {integrity: sha512-O6rT8OJoD9H7LXkAhEDpHPj4qeTGt4j2wE8B2ST10riFkFjY/gCg6IQPeVuv2m3ALvsnU23xcJCxS80STQ+XkQ==}
 
-  '@parity/product-sdk-local-storage@0.3.0':
-    resolution: {integrity: sha512-4LClLkxwEs3UBa/2psLogpGE2GOxoY692cW/4MBwZ+fspY61F/XcvkpR+LS7AeiQATKpByH9HqI20YD31oXtnw==}
-
   '@parity/product-sdk-local-storage@0.3.2':
     resolution: {integrity: sha512-1KJGOZrf6pj1P19j8AVbVC5NTmQe5KGE2VJ0gzJDYCHGWPYECtm7Fc0zfq6AAZbyPJkgsuZz/K4+MRijf4lf2A==}
 
@@ -1251,9 +1230,6 @@ packages:
 
   '@parity/product-sdk-logger@0.1.1':
     resolution: {integrity: sha512-AiSV3TTNlMZJftLQsO78BZsEymGFuJtGMSpGrJ+vUtqaZavWaW/Hc6MICBLnEYgeCrdNpv7QBso3dRsTfnAZXQ==}
-
-  '@parity/product-sdk-signer@0.10.0':
-    resolution: {integrity: sha512-OoVvhQZ2vcMVdEVi0obsqhiLdrwLPBxhVc43Buhd2n1eeYGwLIoiKw3TFJTQo3paASx6pM2sDrheudPJsKyrpA==}
 
   '@parity/product-sdk-signer@0.12.1':
     resolution: {integrity: sha512-PrWDsep8IC1Im3PR8t+UvEQgNmnCK2vHEWVjMC1Ze1QRfyFhPwSu9Gubi3arJP6m8N2J/hdWhInHPWgpmfLAGA==}
@@ -1270,9 +1246,6 @@ packages:
   '@parity/product-sdk-tx@0.2.14':
     resolution: {integrity: sha512-O0v6GL3WkOD5rZxHbakAylsYC0nbUPYTLoSNF3UoiSeO3Jqg6Cl2bRrjPDTD8msjkCO42Fz+umpmDbbAAG/XLg==}
 
-  '@parity/product-sdk-tx@0.3.0':
-    resolution: {integrity: sha512-VzaCUNYe8J1U33jF+U2Yr+WrP1k4rL4DIipNd2myATSpn/vPHB/xisagwLKrICK4h8B1tip5z1H3VjyznkbC4A==}
-
   '@parity/product-sdk-tx@0.4.1':
     resolution: {integrity: sha512-H0F3nYWzscCQF8b3bSHKFUv//SGKK9lZ9Ckck/B4LmvTdaxFnUBjSB+609b3MxinqJvXSPtqwY+kDOQXHc/P8A==}
 
@@ -1281,9 +1254,6 @@ packages:
 
   '@parity/result@0.2.0':
     resolution: {integrity: sha512-QCrhYPeVVaPIjnlsfBIk5GHPRqfuCjy6MjqKkoCP4kwS1LIo5YtJCSFeB5mGtvMG7hiaRNl4lHQcd5YqDfJ1tQ==}
-
-  '@parity/truapi@0.3.2':
-    resolution: {integrity: sha512-mP2mn74nTs9qhMq5+N/G9S/nqU4YHJOrO/+e6lEsLUai7E6N1krcQxnqAur5j1bNhd/YUQO7ps9IHtTmdkgLDg==}
 
   '@parity/truapi@0.5.0':
     resolution: {integrity: sha512-qXalfGa2JuQF0uH41y2gR4zqdSR4droYWMZIY6qEwvvUu0H4OJRSIHJirLhjLnsvSPSWXQUKeV/iu6KORLSg5w==}
@@ -6479,15 +6449,15 @@ snapshots:
       multiformats: 13.4.2
       polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
 
-  '@parity/cdm-builder@3.2.0(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
+  '@parity/cdm-builder@5.0.1(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
     dependencies:
       '@noble/hashes': 2.2.0
-      '@parity/cdm-env': 2.1.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/cdm-utils': 0.4.1
-      '@parity/product-sdk-cloud-storage': 0.7.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-contracts': 0.9.0(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
-      '@parity/product-sdk-descriptors': 0.7.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-tx': 0.3.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/cdm-env': 2.4.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/cdm-utils': 0.5.0
+      '@parity/product-sdk-cloud-storage': 0.10.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/product-sdk-contracts': 0.10.1(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+      '@parity/product-sdk-descriptors': 0.9.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/product-sdk-tx': 0.4.1(esbuild@0.27.7)(rxjs@7.8.2)
       multiformats: 13.4.2
       polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
     transitivePeerDependencies:
@@ -6499,11 +6469,11 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@parity/cdm-codegen@0.6.23(@polkadot-api/ink-contracts@0.6.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
+  '@parity/cdm-codegen@0.6.26(@polkadot-api/ink-contracts@0.6.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
     dependencies:
-      '@parity/cdm-builder': 3.2.0(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
-      '@parity/cdm-env': 2.1.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/cdm-utils': 0.4.1
+      '@parity/cdm-builder': 5.0.1(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+      '@parity/cdm-env': 2.4.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/cdm-utils': 0.5.0
       '@polkadot-api/sdk-ink': 0.7.0(@polkadot-api/ink-contracts@0.6.3)(polkadot-api@2.2.1(esbuild@0.27.7)(rxjs@7.8.2))(rxjs@7.8.2)(typescript@5.9.3)
       polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
     transitivePeerDependencies:
@@ -6516,11 +6486,11 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@parity/cdm-env@2.1.0(esbuild@0.27.7)(rxjs@7.8.2)':
+  '@parity/cdm-env@2.4.0(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
-      '@parity/cdm-utils': 0.4.1
-      '@parity/product-sdk-descriptors': 0.7.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-host': 0.13.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/cdm-utils': 0.5.0
+      '@parity/product-sdk-descriptors': 0.9.0(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/product-sdk-host': 0.15.1(esbuild@0.27.7)(rxjs@7.8.2)
       '@polkadot-labs/hdkd': 0.0.26
       '@polkadot-labs/hdkd-helpers': 0.0.27
       polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
@@ -6532,7 +6502,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@parity/cdm-utils@0.4.1':
+  '@parity/cdm-utils@0.5.0':
     dependencies:
       '@polkadot-labs/hdkd': 0.0.26
       '@polkadot-labs/hdkd-helpers': 0.0.27
@@ -6636,19 +6606,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@parity/product-sdk-chain-client@0.8.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/product-sdk-descriptors': 0.7.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-host': 0.13.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.1
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
   '@parity/product-sdk-cloud-storage@0.10.0(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@parity/bulletin-sdk': 0.3.0(multiformats@13.4.2)(polkadot-api@2.2.1(esbuild@0.27.7)(rxjs@7.8.2))
@@ -6658,25 +6615,6 @@ snapshots:
       '@parity/product-sdk-host': 0.15.1(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/product-sdk-logger': 0.1.1
       '@parity/product-sdk-tx': 0.4.1(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/result': 0.2.0
-      multiformats: 13.4.2
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
-  '@parity/product-sdk-cloud-storage@0.7.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/bulletin-sdk': 0.3.0(multiformats@13.4.2)(polkadot-api@2.2.1(esbuild@0.27.7)(rxjs@7.8.2))
-      '@parity/product-sdk-chain-client': 0.8.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-descriptors': 0.7.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-errors': 0.2.0
-      '@parity/product-sdk-host': 0.13.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.1
-      '@parity/product-sdk-tx': 0.3.0(esbuild@0.27.7)(rxjs@7.8.2)
       '@parity/result': 0.2.0
       multiformats: 13.4.2
       polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
@@ -6708,43 +6646,12 @@ snapshots:
       - utf-8-validate
       - zod
 
-  '@parity/product-sdk-contracts@0.9.0(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)':
-    dependencies:
-      '@parity/product-sdk-address': 0.1.1
-      '@parity/product-sdk-errors': 0.2.0
-      '@parity/product-sdk-keys': 0.3.14(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.1
-      '@parity/product-sdk-signer': 0.10.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-tx': 0.3.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/result': 0.2.0
-      '@polkadot-labs/hdkd-helpers': 0.0.30
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-      viem: 2.52.2(typescript@5.9.3)
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - typescript
-      - utf-8-validate
-      - zod
-
   '@parity/product-sdk-crypto@0.1.1':
     dependencies:
       '@noble/ciphers': 1.3.0
       '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
       tweetnacl: 1.0.3
-
-  '@parity/product-sdk-descriptors@0.7.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
 
   '@parity/product-sdk-descriptors@0.9.0(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
@@ -6767,23 +6674,6 @@ snapshots:
     transitivePeerDependencies:
       - '@polkadot/api'
       - '@polkadot/util'
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
-  '@parity/product-sdk-host@0.13.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/product-sdk-errors': 0.2.0
-      '@parity/product-sdk-logger': 0.1.1
-      '@parity/result': 0.2.0
-      '@parity/truapi': 0.3.2
-      '@polkadot-api/json-rpc-provider': 0.2.0
-      '@polkadot-api/substrate-bindings': 0.20.3
-      neverthrow: 8.2.0
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-    transitivePeerDependencies:
       - bufferutil
       - esbuild
       - rxjs
@@ -6843,23 +6733,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@parity/product-sdk-keys@0.3.14(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/product-sdk-address': 0.1.1
-      '@parity/product-sdk-crypto': 0.1.1
-      '@parity/product-sdk-local-storage': 0.3.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@polkadot-labs/hdkd': 0.0.28
-      '@polkadot-labs/hdkd-helpers': 0.0.30
-      '@scure/sr25519': 2.2.0
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-      scale-ts: 1.6.1
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
   '@parity/product-sdk-keys@0.3.16(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@parity/product-sdk-address': 0.1.1
@@ -6907,17 +6780,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@parity/product-sdk-local-storage@0.3.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/product-sdk-host': 0.13.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.1
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
   '@parity/product-sdk-local-storage@0.3.2(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@parity/product-sdk-host': 0.14.1(esbuild@0.27.7)(rxjs@7.8.2)
@@ -6941,22 +6803,6 @@ snapshots:
       - utf-8-validate
 
   '@parity/product-sdk-logger@0.1.1': {}
-
-  '@parity/product-sdk-signer@0.10.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/product-sdk-address': 0.1.1
-      '@parity/product-sdk-errors': 0.2.0
-      '@parity/product-sdk-host': 0.13.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-keys': 0.3.14(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.1
-      '@parity/result': 0.2.0
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
 
   '@parity/product-sdk-signer@0.12.1(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
@@ -7066,21 +6912,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@parity/product-sdk-tx@0.3.0(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@parity/product-sdk-errors': 0.2.0
-      '@parity/product-sdk-keys': 0.3.14(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.1
-      '@parity/result': 0.2.0
-      '@polkadot-labs/hdkd-helpers': 0.0.30
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
   '@parity/product-sdk-tx@0.4.1(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@parity/product-sdk-errors': 0.2.0
@@ -7102,12 +6933,6 @@ snapshots:
       '@parity/product-sdk-logger': 0.1.1
 
   '@parity/result@0.2.0': {}
-
-  '@parity/truapi@0.3.2':
-    dependencies:
-      '@noble/hashes': 2.2.0
-      neverthrow: 8.2.0
-      scale-ts: 1.6.1
 
   '@parity/truapi@0.5.0':
     dependencies:
