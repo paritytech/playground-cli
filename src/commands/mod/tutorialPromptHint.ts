@@ -23,7 +23,9 @@
  * `editWithAgentStep` at the `playground mod` call site to revert to the
  * quest-track behaviour.
  */
-const TUTORIAL_APP_DOMAIN = "playground-tutorial.dot";
+import { getEnvTld } from "../../config.js";
+
+const TUTORIAL_APP_LABEL = "playground-tutorial";
 
 /**
  * Whether the post-mod next steps should nudge toward the prepopulated
@@ -35,5 +37,7 @@ export function shouldShowTutorialPrompt(args: {
     domain: string;
     startedTutorial: boolean;
 }): boolean {
-    return args.domain === TUTORIAL_APP_DOMAIN;
+    // TLD-aware: the registry keys apps by `<label>.<tld>` and the TLD is
+    // per-env since the DotNS split (`.paseo` on paseo-next-v2).
+    return args.domain === `${TUTORIAL_APP_LABEL}.${getEnvTld()}`;
 }

@@ -43,7 +43,7 @@ import type { DeployLogEvent } from "./progress.js";
 import { createBulletinAuthContext } from "./bulletinAuthContext.js";
 import { withDeployPhase } from "./phase.js";
 import type { ResolvedSigner } from "../signer.js";
-import type { Env } from "../../config.js";
+import { getEnvTld, type Env } from "../../config.js";
 import type { DeployPlan } from "./availability.js";
 import type { SigningGate } from "./signingGate.js";
 
@@ -124,7 +124,7 @@ export interface RunDeployOptions {
 }
 
 export interface DeployOutcome {
-    /** Canonical `<label>.dot` string. */
+    /** Canonical `<label>.<tld>` string (TLD is per-env — see `getEnvTld`). */
     fullDomain: string;
     /** Bulletin storage CID of the app bundle. */
     appCid: string;
@@ -151,7 +151,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
         assertBuildDirExists(options.projectDir, options.buildDir);
     }
 
-    const { label, fullDomain } = normalizeDomain(options.domain);
+    const { label, fullDomain } = normalizeDomain(options.domain, getEnvTld(options.env));
 
     const setup = resolveSignerSetup({
         mode: options.mode,

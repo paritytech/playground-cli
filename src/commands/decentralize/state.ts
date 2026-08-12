@@ -21,7 +21,8 @@
  * `login/completion.ts`, `login/identityLine.ts`, etc.
  */
 
-import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
+import { getEnvTld } from "../../config.js";
+import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { prepareLocalDirectory } from "../../utils/decentralize/local.js";
 import type { DecentralizeOutcome } from "../../utils/decentralize/run.js";
 import type { SignerMode } from "../../utils/deploy/signerMode.js";
@@ -177,16 +178,21 @@ export function validateLocalPathInput(raw: string): string | null {
 }
 
 /**
- * Inline TUI gate for the domain prompt. Delegates to the canonical DotNS
- * `validateDomainLabel` (same rules as `dot deploy` and `normalizeDomain`),
- * tolerating an optional `.dot` suffix. Availability + reservation are decided
- * by the chain in the validate-domain stage; this just rejects labels the
- * chain would reject so the user sees the error inline rather than after submit.
+ * Inline TUI gate for the domain prompt. Delegates to `normalizeDomain` (the
+ * same TLD-aware canonicalization `dot deploy` applies), tolerating an
+ * optional `.<tld>` suffix for the env's TLD and rejecting a wrong-TLD suffix
+ * (e.g. `.dot` on a `.paseo` env) with the same actionable message the deploy
+ * path produces. Availability + reservation are decided by the chain in the
+ * validate-domain stage; this just rejects names the chain would reject so
+ * the user sees the error inline rather than after submit.
  */
-export function validateDomainInput(raw: string): string | null {
+export function validateDomainInput(raw: string, tld: string = getEnvTld()): string | null {
     const trimmed = raw.trim();
     if (!trimmed) return null; // empty = "auto-generate from URL"
-    const label = trimmed.replace(/\.dot$/i, "");
-    const result = validateDomainLabel(label);
-    return result.ok ? null : result.reason;
+    try {
+        normalizeDomain(trimmed, tld);
+        return null;
+    } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+    }
 }

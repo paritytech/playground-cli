@@ -48,7 +48,7 @@ const MAX_HOST_LEN = 30;
  * `domain.ts` and the interactive `DecentralizeScreen` so both read identically.
  */
 export const FREE_DOMAIN_SUFFIX_NOTE =
-    'Free .dot names get a short unique suffix (e.g. "-urcn30") so anyone can ' +
+    'Free DotNS names get a short unique suffix (e.g. "-urcn30") so anyone can ' +
     "register them without a proof-of-personhood credential. Pass --dot=<name> " +
     "(or type a name) to choose your own.";
 
@@ -148,7 +148,7 @@ export interface FindAvailableNameOptions {
      * URL of the site being decentralized. When provided, the generated
      * candidates start with a sanitised version of the hostname (e.g.
      * `shawntabrizi-com-abcd42` rather than `decent-abcd42`). Improves
-     * recognisability of the resulting `.dot.li` URL.
+     * recognisability of the resulting `<name>.<tld>.li` URL.
      */
     siteUrl?: string;
     /**

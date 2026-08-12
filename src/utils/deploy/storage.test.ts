@@ -24,7 +24,7 @@ const bulletinDeployMock = vi.hoisted(() =>
     })),
 );
 
-vi.mock("@parity/polkadot-app-deploy", () => ({
+vi.mock("bulletin-deploy", () => ({
     deploy: bulletinDeployMock,
 }));
 

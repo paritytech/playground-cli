@@ -72,6 +72,25 @@ describe("DeployLogParser", () => {
         expect(events).toEqual([]);
     });
 
+    it("survives bulletin-deploy 0.15's post-Preflight Domain echo (#1240 ordering)", () => {
+        // Since bulletin-deploy 0.15 (PR #1240), the `Domain: <name>.<tld>`
+        // line prints AFTER the Preflight banner (once the chain-resolved TLD
+        // is known) — i.e. it is the first non-divider line following the
+        // banner's closing divider, exactly where the parser considers a
+        // banner title. It must be dropped silently, not mistaken for a phase.
+        const events = feedAll([
+            "============================================================",
+            "Preflight",
+            "============================================================",
+            "   Domain: my-app.paseo",
+            "   [1/3] chunk 0 — 1.00 MB (nonce: 42)",
+        ]);
+        expect(events).toEqual([
+            { kind: "phase-start", phase: "preflight" },
+            { kind: "chunk-progress", current: 1, total: 3 },
+        ]);
+    });
+
     it("drops plain prose lines so we don't flood the TUI", () => {
         // Regression guard: previously we emitted `info` events for every
         // random log line. polkadot-app-deploy produces hundreds per deploy

@@ -43,7 +43,7 @@ import { clearWindowTitle } from "./utils/ui/theme/window-title.js";
 import { startVersionCheck } from "./utils/version-check.js";
 
 const DEPLOY_DESCRIPTION =
-    "Build the project, upload to Bulletin, register a .dot domain, and optionally publish to Playground";
+    "Build the project, upload to Bulletin, register a DotNS domain, and optionally publish to Playground";
 
 async function runDotnsCliIfRequested(): Promise<void> {
     if (process.argv[2] !== "dotns") return;

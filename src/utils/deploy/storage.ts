@@ -34,7 +34,7 @@ import {
     type DeployContent,
     type DeployOptions,
     type DeployResult,
-} from "@parity/polkadot-app-deploy";
+} from "bulletin-deploy";
 import { DeployLogParser, type DeployLogEvent } from "./progress.js";
 import { getChainConfig, type Env } from "../../config.js";
 import { isIpfsMigrationError } from "../toolchain.js";

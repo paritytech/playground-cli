@@ -99,6 +99,16 @@ export interface ChainConfig {
      */
     faucetUrl: string | null;
     /**
+     * DotNS top-level domain for names registered on this env (no leading dot,
+     * e.g. `"paseo"` on paseo-next-v2 — DotNS TLDs went per-network when the
+     * paseo-next-v2 testnet was wiped and DotNS redeployed; previewnet keeps
+     * `"dot"`). Mirrors the per-env `tld` field in bulletin-deploy's
+     * `environments.json`; the `config.test.ts` divergence guard pins the two
+     * copies identical. Read it via `getEnvTld()` — the single helper every
+     * domain-side consumer goes through.
+     */
+    tld: string;
+    /**
      * Chain name that `@parity/cdm-env`'s `getRegistryAddress` understands, used
      * to resolve the CDM meta-registry address for this env. Kept separate from
      * `env` because the two catalogs can disagree on a network's name (the
@@ -132,6 +142,7 @@ const PASEO_NEXT_V2: ChainConfig = {
     bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
     autoAccountMapping: true,
     faucetUrl: "https://faucet.polkadot.io/?network=pah",
+    tld: "paseo",
     cdmEnvName: "paseo-next-v2",
     pgasAssetId: 2_000_000_000,
 };
@@ -171,6 +182,34 @@ export function getChainConfig(env: Env = DEFAULT_ENV): ChainConfig {
         };
     }
     return cfg;
+}
+
+/**
+ * Fallback TLD for envs that don't declare one — mirrors bulletin-deploy's
+ * `DEFAULT_TLD` ("dot" is what every pre-per-network DotNS deployment mints
+ * under, and what upstream falls back to when an env has no `tld`).
+ */
+export const DEFAULT_TLD_FALLBACK = "dot";
+
+/**
+ * Every TLD DotNS has ever minted names under, mirroring bulletin-deploy's
+ * `KNOWN_TLDS` (not exported from its package root, so we keep this copy).
+ * Used only by `normalizeDomain`'s wrong-TLD guard: input ending in a
+ * DIFFERENT known TLD than the env's is a user error worth an actionable
+ * message, while an unknown suffix falls through to plain label validation.
+ */
+export const KNOWN_TLDS: readonly string[] = ["dot", "paseo"];
+
+/**
+ * DotNS TLD for the given env (defaults to the active env), with the upstream
+ * `"dot"` fallback for envs that don't declare one. THE single source of truth
+ * for the domain side of the CLI — everything that renders, parses, or
+ * registers a `<label>.<tld>` name goes through here. Note this is
+ * intentionally separate from `PLAYGROUND_PRODUCT_ID`, which stays
+ * `playground.dot` on every network (see its doc).
+ */
+export function getEnvTld(env: Env = DEFAULT_ENV): string {
+    return CONFIGS[env]?.tld ?? DEFAULT_TLD_FALLBACK;
 }
 
 /**
@@ -235,6 +274,9 @@ export const DAPP_ID = "dot-cli";
  * `mnemonic + "/product/{PLAYGROUND_PRODUCT_ID}/0"`; changing this value
  * changes the on-chain account.
  */
+// NOTE: this id is TLD-independent by ecosystem convention — product ids stay
+// `<label>.dot` on every network; only DotNS registration/serving names use
+// the per-env TLD (see `getEnvTld`). Do NOT thread `getEnvTld` through here.
 export const PLAYGROUND_PRODUCT_ID = "playground.dot";
 
 /**

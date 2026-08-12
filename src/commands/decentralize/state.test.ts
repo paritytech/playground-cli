@@ -240,8 +240,16 @@ describe("validateDomainInput", () => {
         expect(validateDomainInput("myapp")).toBeNull();
     });
 
-    it("accepts the .dot suffix", () => {
-        expect(validateDomainInput("myapp.dot")).toBeNull();
+    it("accepts the env TLD suffix", () => {
+        // Default env is paseo-next-v2 whose DotNS TLD is "paseo".
+        expect(validateDomainInput("myapp.paseo")).toBeNull();
+        // Explicit tld param (previewnet shape).
+        expect(validateDomainInput("myapp.dot", "dot")).toBeNull();
+    });
+
+    it("rejects a wrong-TLD suffix with the actionable deploy-path message", () => {
+        expect(validateDomainInput("myapp.dot")).toMatch(/uses "\.paseo" names/);
+        expect(validateDomainInput("myapp.paseo", "dot")).toMatch(/uses "\.dot" names/);
     });
 
     it("accepts digits and a valid 2-digit suffix", () => {

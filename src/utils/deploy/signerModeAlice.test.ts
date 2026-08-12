@@ -40,7 +40,7 @@
 import { describe, it, expect } from "vitest";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { seedToAccount } from "@parity/product-sdk-keys";
-import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { DEV_PUBLISH_ADDRESS } from "./signerMode.js";
 
 // The canonical SS58 of polkadot-app-deploy's `DEFAULT_MNEMONIC` bare-root

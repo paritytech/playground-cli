@@ -29,6 +29,8 @@
  * short enough to read at a glance; the test enforces a soft length cap.
  */
 
+import { getEnvTld } from "../../config.js";
+
 export interface PromptBox {
     title: string;
     body: string;
@@ -65,8 +67,8 @@ export const PUBLISH_HELP: PromptBox = {
     title: "Publish to the playground",
     body:
         "Choosing Yes lists your app in the public Polkadot Playground so others " +
-        "can find and open it. No still deploys it to your .dot address. It just " +
-        "won't be listed in the playground.",
+        `can find and open it. No still deploys it to your .${getEnvTld()} address. ` +
+        "It just won't be listed in the playground.",
 };
 
 export const MODDABLE_HELP: PromptBox = {
@@ -86,7 +88,7 @@ export const TAGS_HELP: PromptBox = {
 };
 
 export const DOMAIN_HELP: PromptBox = {
-    title: "Choosing your .dot name",
+    title: `Choosing your .${getEnvTld()} name`,
     body:
         "A name with a 9-character-or-longer base (before any optional 2-digit " +
         "suffix) is open to everyone, so it deploys with no personhood check. " +
@@ -122,5 +124,4 @@ export const CONTRACTS_RENAME_NOTICE_HINT = "enter to continue · esc to exit an
 export const BUILD_DIR_HINT =
     "The folder holding your built site (the files we upload). The default fits most projects.";
 
-export const DOMAIN_HINT =
-    "Pick the .dot address people will use to reach your app, e.g. my-app.dot.";
+export const DOMAIN_HINT = `Pick the .${getEnvTld()} address people will use to reach your app, e.g. my-app.${getEnvTld()}.`;

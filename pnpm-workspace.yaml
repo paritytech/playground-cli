@@ -9,16 +9,16 @@
 allowBuilds:
   "@biomejs/biome": true
   "@parity/product-sdk-terminal": false
-  # @parity/polkadot-app-deploy ships a postinstall (`patch-package || true`)
-  # bundling an @novasamatech/sdk-statement@0.6.0 patch. We deny it: our own pnpm
-  # patch on that exact package (see patchedDependencies below) already applies
-  # the fix, so the postinstall is redundant. Keep at false.
-  "@parity/polkadot-app-deploy": false
+  # bulletin-deploy (the renamed @parity/polkadot-app-deploy) ships a postinstall
+  # (`patch-package || true`) bundling an @novasamatech/sdk-statement@0.6.0 patch.
+  # We deny it: our own pnpm patch on that exact package (see patchedDependencies
+  # below) already applies the fix, so the postinstall is redundant. Keep at false.
+  "bulletin-deploy": false
   esbuild: false
   node-datachannel: false
 
 minimumReleaseAgeExclude:
-  - "@parity/polkadot-app-deploy@0.13.1"
+  - "bulletin-deploy@0.15.0-rc.2"
   - "@parity/dotns-cli@0.8.0"
   # The @novasamatech/* 0.8.11 family (pulled transitively by
   # @parity/product-sdk-terminal@^0.6.2 → host-papp@^0.8.9, which resolves to the

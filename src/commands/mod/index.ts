@@ -18,6 +18,7 @@ import { render } from "ink";
 import { Command } from "commander";
 import { existsSync } from "node:fs";
 import { withSpan } from "../../telemetry.js";
+import { getEnvTld } from "../../config.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
 import { getReadOnlyRegistryContract } from "../../utils/registry.js";
 import type { IdentityRegistry } from "../../utils/identity/identityGate.js";
@@ -76,7 +77,11 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
         let metadata: AppEntry | null = null;
 
         if (rawDomain) {
-            domain = rawDomain.endsWith(".dot") ? rawDomain : `${rawDomain}.dot`;
+            // Registry entries are keyed by the canonical `<label>.<tld>` the
+            // publish wrote — per-env since the DotNS TLD split (`.paseo` on
+            // paseo-next-v2). Accept a bare label or a fully-qualified name.
+            const tld = getEnvTld();
+            domain = rawDomain.endsWith(`.${tld}`) ? rawDomain : `${rawDomain}.${tld}`;
         } else {
             const picked = await withSpan("cli.mod.browse", "browse moddable apps", () =>
                 browseAndPick(registry),

@@ -56,11 +56,11 @@ import {
     type StepStatus,
 } from "./runningState.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
-import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
+import { DEFAULT_BUILD_DIR, getChainConfig, getEnvTld, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { ModdableErrorStage, ModdablePreflightStage } from "./ModdableStages.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
-import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
+import { normalizeDomain } from "../../utils/deploy/playground.js";
 import {
     NO_SESSION_NOTICE_TITLE,
     NO_SESSION_NOTICE_BODY,
@@ -417,9 +417,17 @@ export function DeployScreen({
                         prefill={domain ?? ""}
                         externalError={domainError}
                         validate={(v) => {
-                            const label = v.trim().replace(/\.dot$/i, "");
-                            const result = validateDomainLabel(label);
-                            return result.ok ? null : result.reason;
+                            // Same TLD-aware canonicalization the deploy path
+                            // applies — accepts a bare label or `.<envTld>`,
+                            // rejects a wrong-TLD suffix with the actionable
+                            // message. Interactive deploys always run on the
+                            // default env, hence bare `getEnvTld()`.
+                            try {
+                                normalizeDomain(v.trim(), getEnvTld());
+                                return null;
+                            } catch (err) {
+                                return err instanceof Error ? err.message : String(err);
+                            }
                         }}
                         onSubmit={(v) => {
                             const trimmed = v.trim();
@@ -827,7 +835,7 @@ function ConfirmStage({
 
     const view = buildSummaryView({
         mode: inputs.mode,
-        domain: inputs.domain.replace(/\.dot$/, "") + ".dot",
+        domain: normalizeDomain(inputs.domain, getEnvTld()).fullDomain,
         buildDir: inputs.buildDir,
         skipBuild: inputs.skipBuild,
         deployContracts: inputs.deployContracts,

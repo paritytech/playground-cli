@@ -38,7 +38,7 @@ import {
 import { decidePmPhase, pmConfirmLabel } from "./setupFlow.js";
 import { Select } from "../../utils/ui/theme/Select.js";
 import { VERSION_LABEL } from "../../utils/version.js";
-import { getNetworkLabel } from "../../config.js";
+import { getEnvTld, getNetworkLabel } from "../../config.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
 
 interface AppMetadata {
@@ -155,7 +155,12 @@ export function SetupScreen({ domain, metadata: initial, registry, targetDir, on
                 await createOptionalGitBaseline(targetDir, log, sourceLogFile);
 
                 stripPostinstall(targetDir);
-                writeDotJson(targetDir, meta.name ?? domain.replace(/\.dot$/, ""), meta, domain);
+                writeDotJson(
+                    targetDir,
+                    meta.name ?? domain.replace(new RegExp(`\\.${getEnvTld()}$`), ""),
+                    meta,
+                    domain,
+                );
                 ignoreModLogs(targetDir);
             },
         },

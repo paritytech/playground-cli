@@ -30,7 +30,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dot } from "./helpers/dot.js";
-import { ALICE } from "./fixtures/accounts.js";
+import { ALICE, E2E_TLD } from "./fixtures/accounts.js";
 import { TEST_DOMAIN } from "./fixtures/templates.js";
 
 const tempDirs: string[] = [];
@@ -67,7 +67,7 @@ describe("dot mod — clone", () => {
 			).toBe(0);
 
 			// defaultRepoName slugifies the domain and appends a 6-hex suffix.
-			const slug = TEST_DOMAIN.replace(/\.dot$/, "")
+			const slug = TEST_DOMAIN.replace(new RegExp(`\\.${E2E_TLD}$`), "")
 				.toLowerCase()
 				.replace(/[^a-z0-9]+/g, "-");
 			const created = readdirSync(cwd).filter(
@@ -138,11 +138,11 @@ describe("dot mod — clone", () => {
 		async () => {
 			const tempHome = makeTempDir("dot-e2e-mod-home-");
 			const cwd = makeTempDir("dot-e2e-mod-cwd-");
-			const result = await dot(["mod", "some-app.dot"], { home: tempHome, cwd, timeout: 60_000 });
+			const result = await dot(["mod", `some-app.${E2E_TLD}`], { home: tempHome, cwd, timeout: 60_000 });
 			expect(result.exitCode).not.toBe(0);
 			const output = result.stdout + result.stderr;
 			// dot mod is signer-less — it proceeds directly to the registry lookup.
-			// An unknown domain produces: App "some-app.dot" not found in registry
+			// An unknown domain produces: App `some-app.${E2E_TLD}` not found in registry
 			expect(output).toContain("not found in registry");
 		},
 	);
@@ -151,7 +151,7 @@ describe("dot mod — clone", () => {
 describe("dot mod — registry miss", () => {
 	test("reports a registry-miss for an unknown domain", { timeout: 120_000 }, async () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
-		const domain = "nonexistent-domain-xyz-12345.dot";
+		const domain = `nonexistent-domain-xyz-12345.${E2E_TLD}`;
 		const result = await dot(
 			["mod", domain, "--suri", ALICE.suri],
 			{ cwd, timeout: 120_000 },
