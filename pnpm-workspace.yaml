@@ -18,7 +18,10 @@ allowBuilds:
   node-datachannel: false
 
 minimumReleaseAgeExclude:
-  - "bulletin-deploy@0.15.0-rc.2"
+  # 0.15.0 stable published 2026-08-12; it is byte-identical to the validated
+  # rc.2 source (rc.3 was test-script-only), so we opt past the min-age window.
+  # Drop once it ages out.
+  - "bulletin-deploy@0.15.0"
   - "@parity/dotns-cli@0.8.0"
   # The @novasamatech/* 0.8.11 family (pulled transitively by
   # @parity/product-sdk-terminal@^0.6.2 → host-papp@^0.8.9, which resolves to the
