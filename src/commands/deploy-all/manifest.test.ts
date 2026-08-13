@@ -70,15 +70,33 @@ describe("parseManifest", () => {
     });
 
     it("rejects duplicate domains (case- and suffix-insensitive)", () => {
+        // The stripped suffix is the ENV TLD ("paseo" on the default env) —
+        // "arcade" and "Arcade.paseo" deploy to the same DotNS name.
         expect(() =>
             parseManifest(
                 JSON.stringify({
                     apps: [
                         { dir: "a", domain: "arcade" },
-                        { dir: "b", domain: "Arcade.dot" },
+                        { dir: "b", domain: "Arcade.paseo" },
                     ],
                 }),
             ),
         ).toThrow(/duplicate domain/);
+    });
+
+    it("does not conflate a name that merely ends in a foreign-TLD spelling", () => {
+        // ".dot" is NOT the default env's TLD, so "arcade.dot" is a distinct
+        // (and later-rejected-by-normalizeDomain) name, not a duplicate of
+        // "arcade" — the guard only strips the env TLD.
+        expect(() =>
+            parseManifest(
+                JSON.stringify({
+                    apps: [
+                        { dir: "a", domain: "arcade" },
+                        { dir: "b", domain: "arcade.dot" },
+                    ],
+                }),
+            ),
+        ).not.toThrow();
     });
 });

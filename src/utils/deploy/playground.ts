@@ -381,7 +381,7 @@ export async function publishToPlayground(
     options: PublishToPlaygroundOptions,
 ): Promise<PublishToPlaygroundResult> {
     const tld = getEnvTld(options.env);
-    const { label, fullDomain } = normalizeDomain(options.domain, tld);
+    const { fullDomain } = normalizeDomain(options.domain, tld);
 
     const readme = options.cwd ? readReadme(options.cwd) : null;
     // Persist the deploying branch alongside the repo URL so `dot mod` can

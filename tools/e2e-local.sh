@@ -71,7 +71,7 @@ case "$_MODE" in
 		;;
 esac
 
-export TEST_TEMPLATE_DOMAIN="${TEST_TEMPLATE_DOMAIN:-dot-cli-mod-fixture.dot}"
+export TEST_TEMPLATE_DOMAIN="${TEST_TEMPLATE_DOMAIN:-dot-cli-mod-fixture.paseo}"
 export TEST_TEMPLATE_REPO="${TEST_TEMPLATE_REPO:-https://github.com/paritytech/Rock-Paper-Scissors}"
 export DOT_DEPLOY_VERBOSE="${DOT_DEPLOY_VERBOSE:-1}"
 
