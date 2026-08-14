@@ -3,7 +3,9 @@ name: Funder Balance Check
 # Scheduled probe for the dedicated PAS funder on Paseo Asset Hub. When the
 # balance falls below the threshold, the workflow opens (or comments on)
 # a GitHub issue labelled `funder-low-balance` so someone can top it up from
-# https://faucet.polkadot.io/. Idempotent — never files a second open issue.
+# https://faucet.polkadot.io/?parachain=1500 (Asset Hub Next v2 — NOT the
+# network=pah / para-1000 public Asset Hub). Idempotent — never files a
+# second open issue.
 
 on:
     schedule:
@@ -68,7 +70,9 @@ jobs:
                   ADDRESS=$(grep '^address=' balance.txt | cut -d= -f2- || echo "unknown")
                   BALANCE=$(grep '^balance=' balance.txt | cut -d= -f2- || echo "unknown")
                   THRESHOLD=$(grep '^threshold=' balance.txt | cut -d= -f2- || echo "5000.00 PAS")
-                  FAUCET="https://faucet.polkadot.io/?network=pah&address=${ADDRESS}"
+                  # parachain=1500 targets Asset Hub Next v2, where the funder lives.
+                  # network=pah drips to the PUBLIC Paseo Asset Hub (para 1000) instead.
+                  FAUCET="https://faucet.polkadot.io/?parachain=1500&address=${ADDRESS}"
                   NOW=$(date -u +%FT%TZ)
 
                   # `.[0].number // empty` turns an empty result into no

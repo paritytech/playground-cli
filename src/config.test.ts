@@ -104,6 +104,16 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
                 expect(cfg.bulletinGateway).toBe(`${upstreamEnv(envId)?.ipfs}/ipfs/`);
             });
 
+            it("faucet URL matches upstream popSelfServe.faucetUrl", () => {
+                // The `?parachain=<id>` form is load-bearing: `?network=pah`
+                // drips to the PUBLIC Paseo Asset Hub (para 1000), not this
+                // env's chain — a network=pah drip provably left a next-v2
+                // (para 1500) balance at 0. Upstream's catalog carries the
+                // correct per-env link; ours must match it (or be null when
+                // upstream declares none).
+                expect(cfg.faucetUrl).toBe(upstreamEnv(envId)?.popSelfServe?.faucetUrl ?? null);
+            });
+
             it("tld matches upstream (with the upstream 'dot' fallback)", () => {
                 // bulletin-deploy 0.15 made the DotNS TLD per-env (`tld` in
                 // environments.json, e.g. "paseo" on paseo-next-v2); envs

@@ -93,9 +93,14 @@ export interface ChainConfig {
     /** True when Revive auto-maps SS58 → H160 on first tx (paseo-next-v2 onward). */
     autoAccountMapping: boolean;
     /**
-     * Base public faucet URL for this env (callers append `&address=…`), or null
-     * when the env has no public faucet. Single source for the faucet link —
-     * `src/utils/account/funder.ts::faucetUrlFor` reads it from here.
+     * Base public faucet URL for this env (callers append the `address` query
+     * param), or null when the env has no public faucet. Single source for the
+     * faucet link — `src/utils/account/funder.ts::faucetUrlFor` reads it from
+     * here. Mirrors upstream's `popSelfServe.faucetUrl` in bulletin-deploy's
+     * `environments.json` (divergence-guarded): the `?parachain=<id>` form is
+     * load-bearing — `?network=pah` drips to the PUBLIC Paseo Asset Hub
+     * (para 1000), not this env's chain, proven empirically when a
+     * `network=pah` drip left a next-v2 (para 1500) balance at 0.
      */
     faucetUrl: string | null;
     /**
@@ -141,7 +146,7 @@ const PASEO_NEXT_V2: ChainConfig = {
     peopleEndpoints: ["wss://paseo-people-next-system-rpc.polkadot.io"],
     bulletinGateway: "https://paseo-bulletin-next-ipfs.polkadot.io/ipfs/",
     autoAccountMapping: true,
-    faucetUrl: "https://faucet.polkadot.io/?network=pah",
+    faucetUrl: "https://faucet.polkadot.io/?parachain=1500",
     tld: "paseo",
     cdmEnvName: "paseo-next-v2",
     pgasAssetId: 2_000_000_000,

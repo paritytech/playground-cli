@@ -80,3 +80,14 @@ describe("FUNDER_CHAIN dedicated-funder gating", () => {
         expect(DEDICATED_FUNDER_ADDRESS).toBeNull();
     });
 });
+
+describe("faucetUrlFor", () => {
+    it("composes the per-env parachain faucet link with the address param", async () => {
+        const { faucetUrlFor } = await import("./funder.js");
+        // The `?parachain=1500` form is load-bearing: `?network=pah` drips to
+        // the PUBLIC Paseo Asset Hub (para 1000), not Asset Hub Next v2.
+        expect(faucetUrlFor("5Dtest")).toBe(
+            "https://faucet.polkadot.io/?parachain=1500&address=5Dtest",
+        );
+    });
+});

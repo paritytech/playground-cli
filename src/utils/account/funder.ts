@@ -98,5 +98,8 @@ export const DEDICATED_FUNDER_ADDRESS: string | null = dedicatedAddress;
  */
 export function faucetUrlFor(address: string, env?: Env): string | null {
     const base = getChainConfig(env).faucetUrl;
-    return base ? `${base}&address=${address}` : null;
+    if (!base) return null;
+    // Separator-aware: every current base carries a query string (`?parachain=…`),
+    // but don't silently compose an invalid URL if a future env's base doesn't.
+    return `${base}${base.includes("?") ? "&" : "?"}address=${address}`;
 }
