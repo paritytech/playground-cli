@@ -42,6 +42,7 @@ import {
     DEFAULT_ENV,
     ENV_FLAG_CHOICES,
     type Env,
+    getChainConfig,
     getEnvTld,
     resolveLegacyEnv,
 } from "../../config.js";
@@ -154,6 +155,10 @@ export const decentralizeCommand = new Command("decentralize")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
+            // Fail fast on an unwired --env (non-zero, canonical message)
+            // BEFORE the identity gate's soft exit-0 can swallow it — same
+            // ordering as `playground deploy`.
+            getChainConfig(env);
 
             // Builder-identity gate (any signer mode): only revealed builders
             // who joined the competition may decentralize. Blocked is a soft

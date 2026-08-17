@@ -49,6 +49,7 @@ import {
     DEFAULT_ENV,
     ENV_FLAG_CHOICES,
     type Env,
+    getChainConfig,
     getEnvTld,
     resolveLegacyEnv,
 } from "../../config.js";
@@ -139,6 +140,12 @@ export const deployCommand = new Command("deploy")
         runCliCommand("deploy", { watchdog: true, hardExit: true }, async () => {
             const projectDir = resolve(opts.dir ?? process.cwd());
             const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
+            // Validate the target env BEFORE the identity gate: an unwired
+            // --env must fail fast (non-zero) with getChainConfig's canonical
+            // "not yet supported" message, not the gate's sign-in notice
+            // (exit 0) — logging in can't fix a wrong env, and swallowing the
+            // error behind a soft-block hid it entirely.
+            getChainConfig(env);
 
             let userSigner: ResolvedSigner | null = null;
 

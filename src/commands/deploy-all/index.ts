@@ -53,6 +53,7 @@ import {
     DEFAULT_ENV,
     ENV_FLAG_CHOICES,
     type Env,
+    getChainConfig,
     getEnvTld,
     resolveLegacyEnv,
 } from "../../config.js";
@@ -116,6 +117,9 @@ export const deployAllCommand = new Command("deploy-all")
 
 async function runDeployAll(opts: DeployAllOpts): Promise<void> {
     const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
+    // Fail fast on an unwired --env (non-zero, canonical message) BEFORE the
+    // identity gate's soft exit-0 can swallow it — same ordering as `deploy`.
+    getChainConfig(env);
     const mode = opts.signer;
     if (mode !== "dev" && mode !== "phone") {
         throw new Error("deploy-all requires --signer dev or --signer phone.");
