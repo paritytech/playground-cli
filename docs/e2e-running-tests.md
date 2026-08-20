@@ -59,7 +59,7 @@ run and sets the Sentry tag for that run.
 
 **What the script sets up for you:**
 
-- `TEST_TEMPLATE_DOMAIN=dot-cli-mod-fixture.dot` and `TEST_TEMPLATE_REPO` — prevents
+- `TEST_TEMPLATE_DOMAIN=dot-cli-mod-fixture.paseo` and `TEST_TEMPLATE_REPO` — prevents
   chain-dependent mod tests from being silently skipped.
 - `DOT_DEPLOY_VERBOSE=1` — surfaces deploy-pipeline detail on failure.
 - An isolated temp `HOME` — session state from `~/.polkadot-apps/` cannot leak

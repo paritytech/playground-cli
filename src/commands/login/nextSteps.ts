@@ -18,6 +18,9 @@
  * successful `pg login`. Kept in its own data file (no React/Ink) so the list
  * stays testable and the rendering component stays a thin map over it.
  */
+
+import { getEnvTld } from "../../config.js";
+
 export interface NextStep {
     /** Full command the user can copy-paste, e.g. `pg decentralize`. */
     cmd: string;
@@ -28,7 +31,7 @@ export interface NextStep {
 export const NEXT_STEPS: NextStep[] = [
     {
         cmd: "pg decentralize",
-        description: "Take any static website and deploy it to a .dot domain. Fully web3.",
+        description: `Take any static website and deploy it to a .${getEnvTld()} domain. Fully web3.`,
     },
     {
         cmd: "pg mod",
@@ -36,6 +39,6 @@ export const NEXT_STEPS: NextStep[] = [
     },
     {
         cmd: "pg deploy",
-        description: "Built an app already? Deploy it to a .dot domain on Playground.",
+        description: `Built an app already? Deploy it to a .${getEnvTld()} domain on Playground.`,
     },
 ];

@@ -33,7 +33,7 @@ const disconnect = vi.fn();
 // vitest 4 spies forward `new.target`, `new DotNS()` invokes the
 // implementation as a constructor, and arrow functions can't be constructed.
 // A function that returns an object has that object override `this`.
-vi.mock("@parity/polkadot-app-deploy", () => ({
+vi.mock("bulletin-deploy", () => ({
     DotNS: vi.fn(function () {
         return {
             connect,
@@ -81,9 +81,23 @@ describe("checkDomainAvailability", () => {
         expect(result).toEqual({
             status: "available",
             label: NO_STATUS_LABEL,
-            fullDomain: `${NO_STATUS_LABEL}.dot`,
+            // Default env is paseo-next-v2, whose DotNS TLD is "paseo".
+            fullDomain: `${NO_STATUS_LABEL}.paseo`,
             plan: { action: "register" },
         });
+    });
+
+    it("accepts the env TLD suffix and rejects a wrong-TLD one before the network", async () => {
+        const suffixed = await checkDomainAvailability(`${NO_STATUS_LABEL}.paseo`);
+        expect(suffixed.status).toBe("available");
+        if (suffixed.status === "available") {
+            expect(suffixed.fullDomain).toBe(`${NO_STATUS_LABEL}.paseo`);
+        }
+        connect.mockClear();
+        await expect(checkDomainAvailability(`${NO_STATUS_LABEL}.dot`)).rejects.toThrow(
+            /uses "\.paseo" names/,
+        );
+        expect(connect).not.toHaveBeenCalled();
     });
 
     it("returns 'reserved' when the base name is <=5 chars (governance-reserved)", async () => {

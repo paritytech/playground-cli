@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Resolve the `.dot` label to deploy under — either the user's `--dot` (or
+ * Resolve the DotNS label to deploy under — either the user's `--dot` (or
  * typed input from the TUI), validated for availability, or an
  * auto-generated name derived from the site source (URL hostname or local
  * directory basename).
@@ -24,7 +24,7 @@
  */
 
 import { withSpan } from "../../telemetry.js";
-import { type Env } from "../../config.js";
+import { getEnvTld, type Env } from "../../config.js";
 import { checkDomainAvailability, formatAvailability } from "../deploy/availability.js";
 import { normalizeDomain } from "../deploy/playground.js";
 import type { ResolvedSigner } from "../signer.js";
@@ -33,7 +33,7 @@ import { findAvailableRandomName, FREE_DOMAIN_SUFFIX_NOTE } from "./randomName.j
 
 export interface ResolveDomainOptions {
     env: Env;
-    /** When set, treated as the requested label/full-domain (with or without `.dot`). */
+    /** When set, treated as the requested label/full-domain (with or without the env TLD suffix). */
     providedDot: string | undefined | null;
     /** Site source (URL or local directory) — drives the auto-name when `providedDot` is empty. */
     source: DecentralizeSource;
@@ -60,7 +60,7 @@ export async function resolveDomain(opts: ResolveDomainOptions): Promise<Resolve
     const { env, providedDot, source, signer, onMessage } = opts;
 
     if (providedDot) {
-        const normalized = normalizeDomain(providedDot);
+        const normalized = normalizeDomain(providedDot, getEnvTld(env));
         onMessage?.(`\n▸ Checking ${normalized.fullDomain}…`);
         const availability = await withSpan(
             "cli.decentralize.availability",
@@ -88,7 +88,7 @@ export async function resolveDomain(opts: ResolveDomainOptions): Promise<Resolve
     }
 
     const sourceDisplay = source.kind === "url" ? source.url : source.directory;
-    onMessage?.(`\n▸ Picking a free .dot name from ${sourceDisplay}…`);
+    onMessage?.(`\n▸ Picking a free .${getEnvTld(env)} name from ${sourceDisplay}…`);
     const chosen = await withSpan(
         "cli.decentralize.random-name",
         "find available random name",

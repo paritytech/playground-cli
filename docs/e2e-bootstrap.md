@@ -31,7 +31,7 @@ Two categories. All owned by SIGNER after bootstrap.
 
 | Domain | Purpose |
 |---|---|
-| `dot-cli-mod-fixture.dot` | `dot mod` fixture — has `repository` metadata pointing at Rock-Paper-Scissors |
+| `dot-cli-mod-fixture.paseo` | `dot mod` fixture — has `repository` metadata pointing at Rock-Paper-Scissors |
 | `e2e-cli-foundry` | `pr-deploy-foundry` / `nightly-deploy-foundry` cell |
 | `e2e-cli-cdm` | `pr-deploy-cdm` cell (currently skipped pending fixture upgrade) |
 | `e2e-cli-hardhat` | `nightly-deploy-hardhat` cell |
@@ -138,17 +138,17 @@ bun tools/register-e2e-fixtures.ts
 ```bash
 bun tools/register-e2e-fixtures.ts --domain <name>
 # e.g.:
-bun tools/register-e2e-fixtures.ts --domain dot-cli-mod-fixture.dot
+bun tools/register-e2e-fixtures.ts --domain dot-cli-mod-fixture.paseo
 bun tools/register-e2e-fixtures.ts --domain e2e-cli-foundry
 ```
 
-### `dot-cli-mod-fixture.dot` repository URL changed
+### `dot-cli-mod-fixture.paseo` repository URL changed
 
 Edit `FIXTURES` in `tools/register-e2e-fixtures.ts` (the `repositoryUrl` field)
 and re-run:
 
 ```bash
-bun tools/register-e2e-fixtures.ts --domain dot-cli-mod-fixture.dot
+bun tools/register-e2e-fixtures.ts --domain dot-cli-mod-fixture.paseo
 ```
 
 Also update `TEST_TEMPLATE_REPO` in `.github/workflows/e2e.yml` and `e2e/cli/helpers/dot.ts`.

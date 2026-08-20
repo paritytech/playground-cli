@@ -26,7 +26,7 @@ vi.mock("../allowances/bulletin.js", () => ({
     getBulletinAllowanceSigner: getBulletinAllowanceSignerMock,
 }));
 
-import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { ss58Encode } from "@parity/product-sdk-address";
 import {
     resolveSignerSetup,

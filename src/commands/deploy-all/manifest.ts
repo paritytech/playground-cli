@@ -31,12 +31,14 @@
  *   }
  */
 
+import { getEnvTld } from "../../config.js";
+
 export interface ManifestApp {
     /** Stable identifier surfaced in output (defaults to `domain` if omitted). */
     name: string;
     /** Project directory, resolved relative to the manifest file's directory. */
     dir: string;
-    /** DotNS label (with or without `.dot`). */
+    /** DotNS label (with or without the env TLD suffix). */
     domain: string;
     /** Build-output directory relative to `dir`. Falls back to the shared flag. */
     buildDir?: string;
@@ -85,7 +87,11 @@ export function parseManifest(raw: string): ParsedManifest {
         // Two apps writing the same DotNS name in one batch would race on the
         // exact resource the signing gate exists to protect, and the second
         // would just overwrite the first — almost certainly a manifest typo.
-        const normalizedDomain = domain.replace(/\.dot$/i, "").toLowerCase();
+        // Strip the env TLD before comparing so "app" and "app.<tld>" (which
+        // deploy to the same name) are caught as duplicates.
+        const normalizedDomain = domain
+            .replace(new RegExp(`\\.${getEnvTld()}$`, "i"), "")
+            .toLowerCase();
         if (seenDomains.has(normalizedDomain)) {
             throw new Error(`Manifest has a duplicate domain "${domain}".`);
         }

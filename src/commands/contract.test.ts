@@ -15,7 +15,7 @@
 
 import { getRegistryAddress } from "@parity/cdm-env";
 import type { CdmJson } from "@parity/cdm-builder";
-import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { describe, expect, it } from "vitest";
 import { getChainConfig } from "../config.js";
 import {

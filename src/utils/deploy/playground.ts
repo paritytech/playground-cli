@@ -41,7 +41,7 @@ import { submitAndWatch, withRetry } from "@parity/product-sdk-tx";
 import { unwrapResult } from "../tx.js";
 import { getRegistryContract } from "../registry.js";
 import { getConnection } from "../connection.js";
-import { getChainConfig, type Env } from "../../config.js";
+import { getChainConfig, getEnvTld, KNOWN_TLDS, type Env } from "../../config.js";
 import { getBulletinDescriptor } from "../descriptors.js";
 import { captureWarning, withSpan, errorMessage } from "../../telemetry.js";
 import {
@@ -108,7 +108,7 @@ function classifyRevert(error: unknown): { deterministic: boolean; detail: strin
 class RegistryPublishRevertError extends Error {}
 
 export interface PublishToPlaygroundOptions {
-    /** The DotNS label (with or without `.dot`). */
+    /** The DotNS label (with or without the env TLD suffix, e.g. `.paseo`). */
     domain: string;
     /**
      * Signer that submits the registry publish tx. In phone mode this is the
@@ -162,7 +162,7 @@ export interface PublishToPlaygroundOptions {
      */
     isModdable?: boolean;
     /**
-     * Domain (`<label>.dot`) the user modded this app from, or `""`/omitted if
+     * Domain (`<label>.<tld>`) the user modded this app from, or `""`/omitted if
      * this is a first-party publish. Recorded on-chain so the playground-app
      * can render a "modded from" badge AND so the contract credits the SOURCE
      * app's owner the mod XP.
@@ -245,14 +245,40 @@ export function readReadme(cwd: string, capBytes = README_CAP_BYTES): ReadmeStat
     }
 }
 
-/** Strip `.dot` suffix if present, then validate against canonical DotNS rules. */
-export function normalizeDomain(domain: string): { label: string; fullDomain: string } {
-    const label = domain.replace(/\.dot$/i, "");
+/**
+ * Strip the env's TLD suffix if present, then validate against canonical DotNS
+ * rules. TLD-aware since the paseo-next-v2 DotNS redeploy made TLDs
+ * per-network (`.paseo` there, `.dot` on previewnet): a bare label and
+ * `<label>.<tld>` both normalize to `{ label, fullDomain: "<label>.<tld>" }`,
+ * while a name carrying a DIFFERENT known TLD is rejected with the same
+ * actionable message bulletin-deploy's `parseDomainName` produces. Callers
+ * resolve `tld` once via `getEnvTld(env)`.
+ */
+export function normalizeDomain(
+    domain: string,
+    tld: string,
+): { label: string; fullDomain: string } {
+    let label = domain;
+    if (domain.toLowerCase().endsWith(`.${tld.toLowerCase()}`)) {
+        label = domain.slice(0, -(tld.length + 1));
+    } else {
+        const wrongTld = KNOWN_TLDS.find(
+            (known) => known !== tld && domain.toLowerCase().endsWith(`.${known}`),
+        );
+        if (wrongTld) {
+            throw new Error(
+                `Domain "${domain}" ends in ".${wrongTld}", but this environment uses ` +
+                    `".${tld}" names. Pass the bare label (e.g. ` +
+                    `"${domain.slice(0, -(wrongTld.length + 1))}") or the correct ".${tld}" ` +
+                    `suffix instead.`,
+            );
+        }
+    }
     const result = validateDomainLabel(label);
     if (!result.ok) {
         throw new Error(`Invalid domain "${domain}" — ${result.reason}.`);
     }
-    return { label, fullDomain: `${label}.dot` };
+    return { label, fullDomain: `${label}.${tld}` };
 }
 
 /**
@@ -306,32 +332,32 @@ export function buildMetadata(input: {
 }
 
 /**
- * Canonicalizes a caller-supplied `moddedFrom` to `<label>.dot`, or returns
+ * Canonicalizes a caller-supplied `moddedFrom` to `<label>.<tld>`, or returns
  * `null` for any unusable value (omitted, empty/whitespace, or a string that
  * doesn't pass `normalizeDomain`). BOTH the explicit `moddedFrom` option and
  * the `dot.json` field flow through here so a non-canonical or invalid source
  * domain can never reach the on-chain lineage edge — the contract matches the
- * source app by its canonical domain string, so `"foo"` and `"Foo.dot"` would
- * silently miss the XP credit. See playground-app#335.
+ * source app by its canonical domain string, so `"foo"` and a mis-cased or
+ * wrong-TLD variant would silently miss the XP credit. See playground-app#335.
  */
-export function normalizeModdedFrom(value: string | null | undefined): string | null {
+export function normalizeModdedFrom(value: string | null | undefined, tld: string): string | null {
     const trimmed = value?.trim();
     if (!trimmed) return null;
     try {
-        return normalizeDomain(trimmed).fullDomain;
+        return normalizeDomain(trimmed, tld).fullDomain;
     } catch {
         return null;
     }
 }
 
 /**
- * Returns the canonical `<label>.dot` form, or `null` for any unusable value
+ * Returns the canonical `<label>.<tld>` form, or `null` for any unusable value
  * (missing file, parse fail, non-string, or a value that doesn't pass
  * `normalizeDomain`). `dot.json` is user-editable, so we shape-validate before
  * publishing the field on-chain — the frontend still escapes on render, but
  * we don't propagate garbage into shared metadata.
  */
-export function readModdedFrom(cwd: string): string | null {
+export function readModdedFrom(cwd: string, tld: string): string | null {
     const path = join(cwd, "dot.json");
     let raw: string;
     try {
@@ -348,13 +374,14 @@ export function readModdedFrom(cwd: string): string | null {
     if (!parsed || typeof parsed !== "object") return null;
     const value = (parsed as Record<string, unknown>).moddedFrom;
     if (typeof value !== "string") return null;
-    return normalizeModdedFrom(value);
+    return normalizeModdedFrom(value, tld);
 }
 
 export async function publishToPlayground(
     options: PublishToPlaygroundOptions,
 ): Promise<PublishToPlaygroundResult> {
-    const { label, fullDomain } = normalizeDomain(options.domain);
+    const tld = getEnvTld(options.env);
+    const { fullDomain } = normalizeDomain(options.domain, tld);
 
     const readme = options.cwd ? readReadme(options.cwd) : null;
     // Persist the deploying branch alongside the repo URL so `dot mod` can
@@ -370,9 +397,9 @@ export async function publishToPlayground(
     // shape-valid domain; an empty/whitespace/invalid explicit value falls
     // through to `dot.json` ("not provided", not "no parent"). Both sources go
     // through `normalizeModdedFrom`, so the on-chain lineage edge always lands
-    // on the source app's canonical `<label>.dot` — see playground-app#335.
-    const dotJsonModdedFrom = options.cwd ? readModdedFrom(options.cwd) : null;
-    const moddedFrom = normalizeModdedFrom(options.moddedFrom) ?? dotJsonModdedFrom;
+    // on the source app's canonical `<label>.<tld>` — see playground-app#335.
+    const dotJsonModdedFrom = options.cwd ? readModdedFrom(options.cwd, tld) : null;
+    const moddedFrom = normalizeModdedFrom(options.moddedFrom, tld) ?? dotJsonModdedFrom;
     const metadata = buildMetadata({
         repositoryUrl: options.repositoryUrl,
         branch,

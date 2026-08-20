@@ -56,11 +56,11 @@ import {
     type StepStatus,
 } from "./runningState.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
-import { DEFAULT_BUILD_DIR, getChainConfig, getNetworkLabel } from "../../config.js";
+import { DEFAULT_BUILD_DIR, getChainConfig, getEnvTld, getNetworkLabel } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import { ModdableErrorStage, ModdablePreflightStage } from "./ModdableStages.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
-import { validateDomainLabel } from "../../utils/deploy/dotnsRules.js";
+import { normalizeDomain } from "../../utils/deploy/playground.js";
 import {
     NO_SESSION_NOTICE_TITLE,
     NO_SESSION_NOTICE_BODY,
@@ -193,7 +193,24 @@ export function DeployScreen({
     const [highlightedSigner, setHighlightedSigner] = useState<SignerMode>("phone");
     const [deployContracts, setDeployContracts] = useState<boolean | null>(initialDeployContracts);
     const [buildDir, setBuildDir] = useState<string | null>(initialBuildDir);
-    const [domain, setDomain] = useState<string | null>(initialDomain);
+    // A flag-passed `--domain` skips both the domain prompt and the
+    // availability stage (pickNextStage only prompts when domain is null), so
+    // an invalid or wrong-TLD value would otherwise surface as a render-time
+    // throw in ConfirmStage's summary. Validate it once up front: on failure
+    // we fall back to the domain prompt with the message in the usual
+    // inline-error slot, prefilled with the rejected value for editing.
+    const initialDomainError = (() => {
+        if (initialDomain == null) return null;
+        try {
+            normalizeDomain(initialDomain.trim(), getEnvTld());
+            return null;
+        } catch (err) {
+            return err instanceof Error ? err.message : String(err);
+        }
+    })();
+    const [domain, setDomain] = useState<string | null>(
+        initialDomainError === null ? initialDomain : null,
+    );
     const [publishToPlayground, setPublishToPlayground] = useState<boolean | null>(initialPublish);
     const [skipBuild, setSkipBuild] = useState<boolean | null>(effectiveInitialSkipBuild);
     const [moddable, setModdable] = useState<boolean | null>(initialModdable);
@@ -201,7 +218,7 @@ export function DeployScreen({
     // Tri-state: `undefined` = not chosen yet (ask when publishing), `null` =
     // explicitly untagged, a string = chosen tag. A `--tag` flag pre-fills it.
     const [tag, setTag] = useState<string | null | undefined>(initialTag);
-    const [domainError, setDomainError] = useState<string | null>(null);
+    const [domainError, setDomainError] = useState<string | null>(initialDomainError);
     // Captured from the availability check; feeds `resolveSignerSetup` so
     // the summary card shows the correct phone-approval count (a new register
     // is 3 DotNS taps, an update of a name we already own is 1).
@@ -414,12 +431,20 @@ export function DeployScreen({
                     <PromptHint text={DOMAIN_HINT} />
                     <Input
                         label="domain"
-                        prefill={domain ?? ""}
+                        prefill={domain ?? initialDomain ?? ""}
                         externalError={domainError}
                         validate={(v) => {
-                            const label = v.trim().replace(/\.dot$/i, "");
-                            const result = validateDomainLabel(label);
-                            return result.ok ? null : result.reason;
+                            // Same TLD-aware canonicalization the deploy path
+                            // applies — accepts a bare label or `.<envTld>`,
+                            // rejects a wrong-TLD suffix with the actionable
+                            // message. Interactive deploys always run on the
+                            // default env, hence bare `getEnvTld()`.
+                            try {
+                                normalizeDomain(v.trim(), getEnvTld());
+                                return null;
+                            } catch (err) {
+                                return err instanceof Error ? err.message : String(err);
+                            }
                         }}
                         onSubmit={(v) => {
                             const trimmed = v.trim();
@@ -460,7 +485,11 @@ export function DeployScreen({
                         label="publish to the playground?"
                         options={[
                             { value: true, label: "yes", hint: "list it in the public playground" },
-                            { value: false, label: "no", hint: "deploy to my .dot address only" },
+                            {
+                                value: false,
+                                label: "no",
+                                hint: `deploy to my .${getEnvTld()} address only`,
+                            },
                         ]}
                         initialIndex={0}
                         onSelect={(yes) => {
@@ -827,7 +856,7 @@ function ConfirmStage({
 
     const view = buildSummaryView({
         mode: inputs.mode,
-        domain: inputs.domain.replace(/\.dot$/, "") + ".dot",
+        domain: normalizeDomain(inputs.domain, getEnvTld()).fullDomain,
         buildDir: inputs.buildDir,
         skipBuild: inputs.skipBuild,
         deployContracts: inputs.deployContracts,

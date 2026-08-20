@@ -26,7 +26,14 @@ describe("defaultRepoName", () => {
         expect(defaultRepoName("foo.dot")).toMatch(/^foo-[0-9a-f]{6}$/);
     });
 
-    it("handles domains without .dot", () => {
+    it("strips the .paseo suffix (per-env DotNS TLDs)", () => {
+        // Registry domains carry the env TLD since the paseo-next-v2 DotNS
+        // redeploy; the directory name must not keep it as a `-paseo` tail.
+        expect(defaultRepoName("cool-app.paseo")).toMatch(/^cool-app-[0-9a-f]{6}$/);
+        expect(defaultRepoName("My Cool App.PASEO")).toMatch(/^my-cool-app-[0-9a-f]{6}$/);
+    });
+
+    it("handles domains without a TLD suffix", () => {
         expect(defaultRepoName("bar")).toMatch(/^bar-[0-9a-f]{6}$/);
     });
 

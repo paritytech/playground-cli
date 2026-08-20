@@ -14,25 +14,39 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
+import { getEnvTld } from "../../config.js";
 import { shouldShowTutorialPrompt } from "./tutorialPromptHint.js";
 
 describe("shouldShowTutorialPrompt", () => {
-    it("shows the prompt for the hardcoded tutorial app domain", () => {
+    it("shows the prompt for the hardcoded tutorial app label under the env TLD", () => {
+        expect(
+            shouldShowTutorialPrompt({
+                domain: `playground-tutorial.${getEnvTld()}`,
+                startedTutorial: false,
+            }),
+        ).toBe(true);
+    });
+
+    it("does not match the tutorial label under a different TLD", () => {
+        // Registry keys carry the env TLD; a stale `.dot` key is a different app.
         expect(
             shouldShowTutorialPrompt({ domain: "playground-tutorial.dot", startedTutorial: false }),
-        ).toBe(true);
+        ).toBe(false);
     });
 
     it("ignores startedTutorial; gates purely on the domain", () => {
         // A quest track started on some other app must NOT surface the nudge.
         expect(
-            shouldShowTutorialPrompt({ domain: "some-other-app.dot", startedTutorial: true }),
+            shouldShowTutorialPrompt({
+                domain: `some-other-app.${getEnvTld()}`,
+                startedTutorial: true,
+            }),
         ).toBe(false);
     });
 
     it("stays generic for any other app", () => {
-        expect(shouldShowTutorialPrompt({ domain: "cool-app.dot", startedTutorial: false })).toBe(
-            false,
-        );
+        expect(
+            shouldShowTutorialPrompt({ domain: `cool-app.${getEnvTld()}`, startedTutorial: false }),
+        ).toBe(false);
     });
 });

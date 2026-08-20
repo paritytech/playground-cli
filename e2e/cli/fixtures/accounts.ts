@@ -32,6 +32,7 @@
 import { ss58Encode, deriveH160, type HexString } from "@parity/product-sdk-address";
 import { getDevPublicKey, type DevAccountName } from "@parity/product-sdk-tx";
 import { seedToAccount } from "@parity/product-sdk-keys";
+import { getEnvTld } from "../../../src/config.js";
 
 export interface TestAccount {
 	name: string;
@@ -80,7 +81,15 @@ export const ALICE: TestAccount = devAccount("Alice");
 export const BOB: TestAccount = devAccount("Bob");
 
 /**
- * Fixed `.dot` domain names for deploy tests. SIGNER owns all of these after
+ * DotNS TLD of the env the E2E run targets (per-env since the paseo-next-v2
+ * DotNS redeploy — "paseo" there, "dot" on previewnet). Tests build
+ * `<label>.${E2E_TLD}` registry keys / banner expectations from this so they
+ * track the active env instead of hardcoding ".dot".
+ */
+export const E2E_TLD = getEnvTld();
+
+/**
+ * Fixed DotNS labels for deploy tests. SIGNER owns all of these after
  * the first CI run; subsequent runs re-publish to the same domains, which the
  * registry contract permits for the same owner. This keeps the playground
  * registry from accumulating a new entry on every CI run.

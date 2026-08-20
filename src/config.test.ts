@@ -35,9 +35,17 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { loadEnvironments } from "@parity/polkadot-app-deploy";
+import { loadEnvironments } from "bulletin-deploy";
 import { getRegistryAddress } from "@parity/cdm-env";
-import { CONFIGS, DEFAULT_ENV, getPgasAssetId, type ChainConfig, type Env } from "./config.js";
+import {
+    CONFIGS,
+    DEFAULT_ENV,
+    DEFAULT_TLD_FALLBACK,
+    getEnvTld,
+    getPgasAssetId,
+    type ChainConfig,
+    type Env,
+} from "./config.js";
 
 const { doc } = await loadEnvironments();
 
@@ -95,8 +103,36 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
             it("bulletin gateway derives from upstream ipfs", () => {
                 expect(cfg.bulletinGateway).toBe(`${upstreamEnv(envId)?.ipfs}/ipfs/`);
             });
+
+            it("faucet URL matches upstream popSelfServe.faucetUrl", () => {
+                // The `?parachain=<id>` form is load-bearing: `?network=pah`
+                // drips to the PUBLIC Paseo Asset Hub (para 1000), not this
+                // env's chain — a network=pah drip provably left a next-v2
+                // (para 1500) balance at 0. Upstream's catalog carries the
+                // correct per-env link; ours must match it (or be null when
+                // upstream declares none).
+                expect(cfg.faucetUrl).toBe(upstreamEnv(envId)?.popSelfServe?.faucetUrl ?? null);
+            });
+
+            it("tld matches upstream (with the upstream 'dot' fallback)", () => {
+                // bulletin-deploy 0.15 made the DotNS TLD per-env (`tld` in
+                // environments.json, e.g. "paseo" on paseo-next-v2); envs
+                // without one fall back to its DEFAULT_TLD ("dot"). Our copy
+                // must track it exactly or every registered/served name
+                // lands under the wrong suffix.
+                expect(cfg.tld).toBe(upstreamEnv(envId)?.tld ?? DEFAULT_TLD_FALLBACK);
+            });
         });
     }
+
+    it("getEnvTld falls back to 'dot' for envs without a wired config", () => {
+        // Unwired env ⇒ no CONFIGS entry ⇒ the upstream DEFAULT_TLD fallback.
+        expect(getEnvTld("preview")).toBe(DEFAULT_TLD_FALLBACK);
+    });
+
+    it("getEnvTld resolves the active env's TLD by default", () => {
+        expect(getEnvTld()).toBe(CONFIGS[DEFAULT_ENV]?.tld);
+    });
 
     it("default env has a non-empty CDM meta-registry address in @parity/cdm-env", () => {
         const cfg = CONFIGS[DEFAULT_ENV];

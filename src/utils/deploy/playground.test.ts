@@ -120,56 +120,95 @@ beforeEach(() => {
 });
 
 describe("normalizeDomain", () => {
-    it("accepts a valid label and appends .dot", () => {
-        expect(normalizeDomain("my-app")).toEqual({ label: "my-app", fullDomain: "my-app.dot" });
-    });
-
-    it("strips an existing .dot suffix", () => {
-        expect(normalizeDomain("my-app.dot")).toEqual({
+    it("accepts a valid label and appends the env TLD", () => {
+        expect(normalizeDomain("my-app", "dot")).toEqual({
             label: "my-app",
             fullDomain: "my-app.dot",
         });
+        expect(normalizeDomain("my-app", "paseo")).toEqual({
+            label: "my-app",
+            fullDomain: "my-app.paseo",
+        });
+    });
+
+    it("strips an existing TLD suffix matching the env", () => {
+        expect(normalizeDomain("my-app.dot", "dot")).toEqual({
+            label: "my-app",
+            fullDomain: "my-app.dot",
+        });
+        expect(normalizeDomain("my-app.paseo", "paseo")).toEqual({
+            label: "my-app",
+            fullDomain: "my-app.paseo",
+        });
+    });
+
+    it("strips the suffix case-insensitively", () => {
+        expect(normalizeDomain("my-app.PASEO", "paseo")).toEqual({
+            label: "my-app",
+            fullDomain: "my-app.paseo",
+        });
+    });
+
+    it("rejects a known TLD that differs from the env's (both directions)", () => {
+        // .dot input on a .paseo env — the paseo-next-v2 shape.
+        expect(() => normalizeDomain("my-app.dot", "paseo")).toThrow(
+            /ends in "\.dot", but this environment uses "\.paseo" names/,
+        );
+        // .paseo input on a .dot env — the previewnet shape.
+        expect(() => normalizeDomain("my-app.paseo", "dot")).toThrow(
+            /ends in "\.paseo", but this environment uses "\.dot" names/,
+        );
+    });
+
+    it("suggests the bare label in the wrong-TLD message", () => {
+        expect(() => normalizeDomain("my-app.dot", "paseo")).toThrow(/"my-app"/);
     });
 
     it("rejects illegal characters", () => {
-        expect(() => normalizeDomain("My_App!")).toThrow(/Invalid domain/);
+        expect(() => normalizeDomain("My_App!", "dot")).toThrow(/Invalid domain/);
     });
 
     it("rejects uppercase (chain stores lowercase only)", () => {
-        expect(() => normalizeDomain("MyApp")).toThrow(/lowercase/i);
+        expect(() => normalizeDomain("MyApp", "dot")).toThrow(/lowercase/i);
     });
 
     it("rejects labels shorter than 3 characters", () => {
-        expect(() => normalizeDomain("ab")).toThrow(/at least 3/i);
+        expect(() => normalizeDomain("ab", "dot")).toThrow(/at least 3/i);
     });
 
     it("rejects a trailing dash", () => {
-        expect(() => normalizeDomain("my-app-")).toThrow(/dash/i);
+        expect(() => normalizeDomain("my-app-", "dot")).toThrow(/dash/i);
     });
 
     it("rejects a one-digit suffix", () => {
-        expect(() => normalizeDomain("myapp1")).toThrow(/two digits/i);
+        expect(() => normalizeDomain("myapp1", "dot")).toThrow(/two digits/i);
     });
 });
 
 describe("normalizeModdedFrom", () => {
     it("returns null for omitted/empty/whitespace input", () => {
-        expect(normalizeModdedFrom(undefined)).toBeNull();
-        expect(normalizeModdedFrom(null)).toBeNull();
-        expect(normalizeModdedFrom("")).toBeNull();
-        expect(normalizeModdedFrom("   ")).toBeNull();
+        expect(normalizeModdedFrom(undefined, "dot")).toBeNull();
+        expect(normalizeModdedFrom(null, "dot")).toBeNull();
+        expect(normalizeModdedFrom("", "dot")).toBeNull();
+        expect(normalizeModdedFrom("   ", "dot")).toBeNull();
     });
 
-    it("canonicalizes to <label>.dot, adding the suffix and trimming", () => {
-        expect(normalizeModdedFrom("original")).toBe("original.dot");
-        expect(normalizeModdedFrom("original.dot")).toBe("original.dot");
-        expect(normalizeModdedFrom("  original.dot  ")).toBe("original.dot");
+    it("canonicalizes to <label>.<tld>, adding the suffix and trimming", () => {
+        expect(normalizeModdedFrom("original", "dot")).toBe("original.dot");
+        expect(normalizeModdedFrom("original.dot", "dot")).toBe("original.dot");
+        expect(normalizeModdedFrom("  original.dot  ", "dot")).toBe("original.dot");
+        expect(normalizeModdedFrom("original", "paseo")).toBe("original.paseo");
+        expect(normalizeModdedFrom("original.paseo", "paseo")).toBe("original.paseo");
     });
 
     it("returns null for a malformed domain so it can't reach on-chain", () => {
-        expect(normalizeModdedFrom("Not A Domain!")).toBeNull();
-        expect(normalizeModdedFrom("../etc.dot")).toBeNull();
-        expect(normalizeModdedFrom("foo/bar.dot")).toBeNull();
+        expect(normalizeModdedFrom("Not A Domain!", "dot")).toBeNull();
+        expect(normalizeModdedFrom("../etc.dot", "dot")).toBeNull();
+        expect(normalizeModdedFrom("foo/bar.dot", "dot")).toBeNull();
+    });
+
+    it("returns null for a wrong-TLD lineage edge rather than propagating it", () => {
+        expect(normalizeModdedFrom("original.dot", "paseo")).toBeNull();
     });
 });
 
@@ -315,7 +354,7 @@ describe("readModdedFrom", () => {
     it("returns null when dot.json is missing", () => {
         const dir = makeTmpDir();
         try {
-            expect(readModdedFrom(dir)).toBeNull();
+            expect(readModdedFrom(dir, "dot")).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -325,7 +364,7 @@ describe("readModdedFrom", () => {
         const dir = makeTmpDir();
         try {
             writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
-            expect(readModdedFrom(dir)).toBe("original.dot");
+            expect(readModdedFrom(dir, "dot")).toBe("original.dot");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -335,11 +374,11 @@ describe("readModdedFrom", () => {
         const dir = makeTmpDir();
         try {
             writeFileSync(join(dir, "dot.json"), JSON.stringify({ name: "x" }));
-            expect(readModdedFrom(dir)).toBeNull();
+            expect(readModdedFrom(dir, "dot")).toBeNull();
             writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "   " }));
-            expect(readModdedFrom(dir)).toBeNull();
+            expect(readModdedFrom(dir, "dot")).toBeNull();
             writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: 42 }));
-            expect(readModdedFrom(dir)).toBeNull();
+            expect(readModdedFrom(dir, "dot")).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -349,7 +388,7 @@ describe("readModdedFrom", () => {
         const dir = makeTmpDir();
         try {
             writeFileSync(join(dir, "dot.json"), "{ not json");
-            expect(readModdedFrom(dir)).toBeNull();
+            expect(readModdedFrom(dir, "dot")).toBeNull();
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -367,7 +406,7 @@ describe("readModdedFrom", () => {
             ];
             for (const moddedFrom of cases) {
                 writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom }));
-                expect(readModdedFrom(dir), `expected null for ${moddedFrom}`).toBeNull();
+                expect(readModdedFrom(dir, "dot"), `expected null for ${moddedFrom}`).toBeNull();
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -378,7 +417,7 @@ describe("readModdedFrom", () => {
         const dir = makeTmpDir();
         try {
             writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original" }));
-            expect(readModdedFrom(dir)).toBe("original.dot");
+            expect(readModdedFrom(dir, "dot")).toBe("original.dot");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -500,7 +539,7 @@ describe("publishToPlayground", () => {
                 cwd: dir,
             });
 
-            expect(result.fullDomain).toBe("my-app.dot");
+            expect(result.fullDomain).toBe("my-app.paseo");
             expect(result.metadata).toEqual({
                 repository: "https://github.com/paritytech/example",
             });
@@ -510,7 +549,7 @@ describe("publishToPlayground", () => {
                 bulletinStorageSigner,
             );
             expect(publishTx).toHaveBeenCalledWith(
-                "my-app.dot",
+                "my-app.paseo",
                 "bafymeta",
                 1,
                 {
@@ -528,7 +567,7 @@ describe("publishToPlayground", () => {
 
     it("omits the repository field when repositoryUrl is null", async () => {
         const result = await publishToPlayground({
-            domain: "my-app.dot",
+            domain: "my-app.paseo",
             publishSigner: fakeSigner,
             repositoryUrl: null,
             cwd: "/definitely/not/a/repo",
@@ -592,7 +631,7 @@ describe("publishToPlayground", () => {
             isDevSigner: true,
         });
         expect(publishTx).toHaveBeenCalledWith(
-            "claimed-app.dot",
+            "claimed-app.paseo",
             "bafymeta",
             1,
             {
@@ -614,7 +653,7 @@ describe("publishToPlayground", () => {
             isPrivate: true,
         });
         expect(publishTx).toHaveBeenCalledWith(
-            "secret.dot",
+            "secret.paseo",
             "bafymeta",
             0,
             {
@@ -637,7 +676,7 @@ describe("publishToPlayground", () => {
             isDevSigner: true,
         });
         expect(publishTx).toHaveBeenCalledWith(
-            "modded-by-dev.dot",
+            "modded-by-dev.paseo",
             "bafymeta",
             1,
             {
@@ -653,7 +692,7 @@ describe("publishToPlayground", () => {
     it("forwards moddedFrom captured by `dot mod` in dot.json to registry.publish", async () => {
         const dir = makeTmpDir();
         try {
-            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.paseo" }));
             await publishToPlayground({
                 domain: "my-mod",
                 publishSigner: fakeSigner,
@@ -661,14 +700,14 @@ describe("publishToPlayground", () => {
                 cwd: dir,
             });
             expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.dot",
+                "my-mod.paseo",
                 "bafymeta",
                 1,
                 {
                     isSome: false,
                     value: "0x0000000000000000000000000000000000000000",
                 },
-                "original.dot",
+                "original.paseo",
                 false,
                 false,
             );
@@ -688,7 +727,7 @@ describe("publishToPlayground", () => {
             // Stale value inherited from the cloned source (e.g. tutorial).
             writeFileSync(
                 join(dir, "dot.json"),
-                JSON.stringify({ moddedFrom: "playground-tutorial.dot" }),
+                JSON.stringify({ moddedFrom: "playground-tutorial.paseo" }),
             );
             const result = await publishToPlayground({
                 domain: "my-mod",
@@ -696,33 +735,33 @@ describe("publishToPlayground", () => {
                 repositoryUrl: null,
                 cwd: dir,
                 // True immediate parent, known by the caller that did the mod.
-                moddedFrom: "steampunk-lizard-spock01.dot",
+                moddedFrom: "steampunk-lizard-spock01.paseo",
             });
             expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.dot",
+                "my-mod.paseo",
                 "bafymeta",
                 1,
                 {
                     isSome: false,
                     value: "0x0000000000000000000000000000000000000000",
                 },
-                "steampunk-lizard-spock01.dot",
+                "steampunk-lizard-spock01.paseo",
                 false,
                 false,
             );
             // The explicit value must ALSO drive the metadata JSON, not just the
             // on-chain arg — otherwise the badge and the XP edge disagree.
-            expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.dot");
+            expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
     });
 
-    // The contract matches lineage on the canonical `<label>.dot` string, so a
-    // caller passing a bare label or trailing `.dot`-less value must still land
+    // The contract matches lineage on the canonical `<label>.paseo` string, so a
+    // caller passing a bare label or trailing `.paseo`-less value must still land
     // on the canonical form — same as the `dot.json` path goes through
     // `normalizeDomain`.
-    it("canonicalizes a non-`.dot` explicit moddedFrom before publishing", async () => {
+    it("canonicalizes a non-`.paseo` explicit moddedFrom before publishing", async () => {
         const dir = makeTmpDir();
         try {
             const result = await publishToPlayground({
@@ -733,18 +772,18 @@ describe("publishToPlayground", () => {
                 moddedFrom: "steampunk-lizard-spock01",
             });
             expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.dot",
+                "my-mod.paseo",
                 "bafymeta",
                 1,
                 {
                     isSome: false,
                     value: "0x0000000000000000000000000000000000000000",
                 },
-                "steampunk-lizard-spock01.dot",
+                "steampunk-lizard-spock01.paseo",
                 false,
                 false,
             );
-            expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.dot");
+            expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -753,7 +792,7 @@ describe("publishToPlayground", () => {
     it("falls back to dot.json when the explicit moddedFrom is empty/whitespace", async () => {
         const dir = makeTmpDir();
         try {
-            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.paseo" }));
             const result = await publishToPlayground({
                 domain: "my-mod",
                 publishSigner: fakeSigner,
@@ -762,18 +801,18 @@ describe("publishToPlayground", () => {
                 moddedFrom: "   ",
             });
             expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.dot",
+                "my-mod.paseo",
                 "bafymeta",
                 1,
                 {
                     isSome: false,
                     value: "0x0000000000000000000000000000000000000000",
                 },
-                "original.dot",
+                "original.paseo",
                 false,
                 false,
             );
-            expect(result.metadata.moddedFrom).toBe("original.dot");
+            expect(result.metadata.moddedFrom).toBe("original.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -785,7 +824,7 @@ describe("publishToPlayground", () => {
     it("falls back to dot.json when the explicit moddedFrom is malformed", async () => {
         const dir = makeTmpDir();
         try {
-            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.dot" }));
+            writeFileSync(join(dir, "dot.json"), JSON.stringify({ moddedFrom: "original.paseo" }));
             const result = await publishToPlayground({
                 domain: "my-mod",
                 publishSigner: fakeSigner,
@@ -794,18 +833,18 @@ describe("publishToPlayground", () => {
                 moddedFrom: "Not A Domain!",
             });
             expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.dot",
+                "my-mod.paseo",
                 "bafymeta",
                 1,
                 {
                     isSome: false,
                     value: "0x0000000000000000000000000000000000000000",
                 },
-                "original.dot",
+                "original.paseo",
                 false,
                 false,
             );
-            expect(result.metadata.moddedFrom).toBe("original.dot");
+            expect(result.metadata.moddedFrom).toBe("original.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -827,7 +866,7 @@ describe("publishToPlayground", () => {
             cwd: "/definitely/not/a/repo",
         });
         expect(publishTx).toHaveBeenCalledTimes(3);
-        expect(result.fullDomain).toBe("flaky.dot");
+        expect(result.fullDomain).toBe("flaky.paseo");
     }, 30_000);
 
     it("captures a warning when registry publish retries", async () => {
@@ -836,7 +875,7 @@ describe("publishToPlayground", () => {
             .mockResolvedValueOnce({ ok: true, txHash: "0xdead" });
 
         await publishToPlayground({
-            domain: "my-app.dot",
+            domain: "my-app.paseo",
             publishSigner: fakeSigner,
             repositoryUrl: null,
             cwd: undefined,
@@ -854,7 +893,7 @@ describe("publishToPlayground", () => {
 
     it("wraps metadata upload and registry publish in spans", async () => {
         await publishToPlayground({
-            domain: "my-app.dot",
+            domain: "my-app.paseo",
             publishSigner: fakeSigner,
             repositoryUrl: null,
             cwd: undefined,
@@ -885,7 +924,7 @@ describe("publishToPlayground", () => {
             });
 
         await publishToPlayground({
-            domain: "my-app.dot",
+            domain: "my-app.paseo",
             publishSigner: fakeSigner,
             repositoryUrl: null,
             cwd: undefined,

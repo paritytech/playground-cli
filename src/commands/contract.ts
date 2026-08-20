@@ -44,7 +44,7 @@ import {
     resolveQueryOrigin,
 } from "@parity/cdm-env";
 import { createContractFromClient } from "@parity/product-sdk-contracts";
-import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC as PAD_DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { Command, Option } from "commander";
 import { createClient, type HexString, type SS58String } from "polkadot-api";
 import { getWsProvider } from "polkadot-api/ws";

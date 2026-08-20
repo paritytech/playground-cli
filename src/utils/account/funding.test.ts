@@ -50,7 +50,7 @@ vi.mock("./funder.js", () => ({
         { name: "Alice", address: ALICE_ADDRESS, signer: ALICE_SIGNER },
     ],
     DEDICATED_FUNDER_ADDRESS: DEDICATED_ADDRESS,
-    faucetUrlFor: (addr: string) => `https://faucet.polkadot.io/?network=pah&address=${addr}`,
+    faucetUrlFor: (addr: string) => `https://faucet.polkadot.io/?parachain=1500&address=${addr}`,
 }));
 
 const { checkBalance, ensureFunded, pickFunder, FUND_AMOUNT, FUNDER_FEE_BUFFER } = await import(

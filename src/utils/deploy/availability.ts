@@ -36,16 +36,16 @@
 import { ss58ToH160 } from "@parity/product-sdk-address";
 import { normalizeDomain } from "./playground.js";
 import { classifyLabel, POP_STATUS } from "./dotnsRules.js";
-import { getChainConfig, type Env } from "../../config.js";
+import { getChainConfig, getEnvTld, type Env } from "../../config.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-type DotNSInstance = InstanceType<typeof import("@parity/polkadot-app-deploy").DotNS>;
+type DotNSInstance = InstanceType<typeof import("bulletin-deploy").DotNS>;
 
-let bulletinDeployPromise: Promise<typeof import("@parity/polkadot-app-deploy")> | null = null;
+let bulletinDeployPromise: Promise<typeof import("bulletin-deploy")> | null = null;
 
 async function createDotNS(): Promise<DotNSInstance> {
-    bulletinDeployPromise ??= import("@parity/polkadot-app-deploy");
+    bulletinDeployPromise ??= import("bulletin-deploy");
     const { DotNS } = await bulletinDeployPromise;
     return new DotNS();
 }
@@ -107,7 +107,7 @@ export async function checkDomainAvailability(
     domain: string,
     options: CheckAvailabilityOptions = {},
 ): Promise<AvailabilityResult> {
-    const { label, fullDomain } = normalizeDomain(domain);
+    const { label, fullDomain } = normalizeDomain(domain, getEnvTld(options.env));
     const cfg = getChainConfig(options.env);
 
     // DotNS connect pings RPC + does an `ensureAccountMapped` tx if the dev

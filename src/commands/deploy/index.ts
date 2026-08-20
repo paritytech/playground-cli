@@ -49,9 +49,12 @@ import {
     DEFAULT_ENV,
     ENV_FLAG_CHOICES,
     type Env,
+    getChainConfig,
+    getEnvTld,
     resolveLegacyEnv,
 } from "../../config.js";
 import { ensureGitInstalled, resolveRepositoryUrl } from "../../utils/deploy/moddable.js";
+import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { assertBuildDirExists } from "../../utils/deploy/buildDir.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
@@ -89,10 +92,10 @@ interface DeployOpts {
 
 export const deployCommand = new Command("deploy")
     .description(
-        "Build the project, upload to Bulletin, register a .dot domain, and optionally publish to Playground",
+        "Build the project, upload to Bulletin, register a DotNS domain, and optionally publish to Playground",
     )
     .addOption(new Option("--signer <mode>", "Signer mode").choices(["dev", "phone"]))
-    .option("--domain <name>", "DotNS domain (e.g. my-app or my-app.dot)")
+    .option("--domain <name>", `DotNS domain (e.g. my-app or my-app.${getEnvTld()})`)
     .option(
         "--buildDir <path>",
         `Directory containing build artifacts (default: ${DEFAULT_BUILD_DIR})`,
@@ -137,6 +140,12 @@ export const deployCommand = new Command("deploy")
         runCliCommand("deploy", { watchdog: true, hardExit: true }, async () => {
             const projectDir = resolve(opts.dir ?? process.cwd());
             const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
+            // Validate the target env BEFORE the identity gate: an unwired
+            // --env must fail fast (non-zero) with getChainConfig's canonical
+            // "not yet supported" message, not the gate's sign-in notice
+            // (exit 0) — logging in can't fix a wrong env, and swallowing the
+            // error behind a soft-block hid it entirely.
+            getChainConfig(env);
 
             let userSigner: ResolvedSigner | null = null;
 
@@ -512,12 +521,13 @@ async function runHeadless(ctx: {
     // with that local account; dev mode without `--suri` (with or without a
     // session) falls back to polkadot-app-deploy's DEFAULT_MNEMONIC bare-root,
     // which is `DEV_PUBLISH_ADDRESS`.
-    process.stdout.write(`\nChecking availability of ${domain.replace(/\.dot$/, "") + ".dot"}…\n`);
+    const { label: domainLabel, fullDomain } = normalizeDomain(domain, getEnvTld(ctx.env));
+    process.stdout.write(`\nChecking availability of ${fullDomain}…\n`);
     const dotnsOwnerSs58Address = resolveDotnsOwnerAddress(mode, ctx.userSigner);
     const availability = await withSpan(
         "cli.deploy.availability",
         "check domain availability",
-        { "cli.deploy.domain": domain.replace(/\.dot$/, "") },
+        { "cli.deploy.domain": domainLabel },
         () =>
             checkDomainAvailability(domain, {
                 env: ctx.env,

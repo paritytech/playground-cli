@@ -28,7 +28,7 @@ import { describe, test, expect } from "vitest";
 import { resolve } from "node:path";
 import { dot } from "./helpers/dot.js";
 import { setupModdableFixture } from "./helpers/moddable-setup.js";
-import { SIGNER, BOB, E2E_DOMAINS } from "./fixtures/accounts.js";
+import { SIGNER, BOB, E2E_DOMAINS, E2E_TLD } from "./fixtures/accounts.js";
 import { fixturePath } from "./fixtures/templates.js";
 import { getApp, getOwnerAppCount, getOwnerH160 } from "./fixtures/registry.js";
 
@@ -105,7 +105,7 @@ describe("dot deploy — preflight and validation", () => {
 		// Availability banner names the domain; this is the strongest signal we
 		// have that the availability check actually executed against this run's
 		// domain (rather than echoing the arg in a usage/error string).
-		const availIdx = output.indexOf(`Checking availability of ${domain}.dot`);
+		const availIdx = output.indexOf(`Checking availability of ${domain}.${E2E_TLD}`);
 		expect(
 			availIdx,
 			`availability banner not found:\n${output}`,
@@ -143,7 +143,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		// preserves the per-owner index on re-publish (owner is immutable
 		// after first publish), so the expected delta depends on this.
 		const beforeCount = await getOwnerAppCount(SIGNER.h160);
-		const wasAlreadyPublished = (await getApp(`${domain}.dot`)) !== null;
+		const wasAlreadyPublished = (await getApp(`${domain}.${E2E_TLD}`)) !== null;
 		const result = await dot([
 			"deploy",
 			"--no-contracts",
@@ -170,8 +170,8 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		// extrinsic would otherwise pass.
 		const cliCid = extractMetadataCid(result.stdout);
 		expect(cliCid, "CLI did not print Metadata CID").not.toBeNull();
-		const entry = await getApp(`${domain}.dot`);
-		expect(entry, `registry has no entry for ${domain}.dot`).not.toBeNull();
+		const entry = await getApp(`${domain}.${E2E_TLD}`);
+		expect(entry, `registry has no entry for ${domain}.${E2E_TLD}`).not.toBeNull();
 		// Belt-and-braces: the on-chain CID should match what the CLI claims
 		// it published. A divergence here means the CLI is reporting one CID
 		// to the user while writing a different one to the chain.
@@ -188,7 +188,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		// Both `getOwnerH160` (fixtures/registry.ts) and `deriveH160`
 		// (via SIGNER.h160 in fixtures/accounts.ts) emit lowercase, so
 		// no normalisation is needed at the comparison site.
-		const ownerH160 = await getOwnerH160(`${domain}.dot`);
+		const ownerH160 = await getOwnerH160(`${domain}.${E2E_TLD}`);
 		expect(ownerH160).toBe(SIGNER.h160);
 
 		// MyApps query path: the per-owner index must include this domain
@@ -275,7 +275,7 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 		// Independent registry check: the on-chain entry must contain the CID
 		// the CLI claims it published. This catches regressions where the CLI
 		// prints "Deploy complete" but never sent the registry extrinsic.
-		const entry = await getApp(`${domain}.dot`);
+		const entry = await getApp(`${domain}.${E2E_TLD}`);
 		expect(entry).not.toBeNull();
 		expect(entry!.metadataUri).toContain(secondCid!);
 	});
@@ -386,8 +386,8 @@ describe("dot deploy — moddable (requires Paseo + IPFS + GH)", () => {
 			// existence here give sufficient coverage; a future
 			// enhancement can fetch the metadata JSON from bulletin and
 			// assert `metadata.repository === repoUrl` directly.
-			const entry = await getApp(`${domain}.dot`);
-			expect(entry, `registry has no entry for ${domain}.dot`).not.toBeNull();
+			const entry = await getApp(`${domain}.${E2E_TLD}`);
+			expect(entry, `registry has no entry for ${domain}.${E2E_TLD}`).not.toBeNull();
 
 			// Deliberately no test-side `gh repo delete` — the weekly
 			// cleanup cron (e2e-cleanup.yml) sweeps repos older than 7

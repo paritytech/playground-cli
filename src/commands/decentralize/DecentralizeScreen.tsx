@@ -33,7 +33,7 @@ import {
     Select,
 } from "../../utils/ui/theme/index.js";
 import { PhoneApprovalCallout } from "../../utils/ui/theme/PhoneApprovalCallout.js";
-import { getNetworkLabel, type Env } from "../../config.js";
+import { getEnvTld, getNetworkLabel, type Env } from "../../config.js";
 import { VERSION_LABEL } from "../../utils/version.js";
 import type { ResolvedSigner } from "../../utils/signer.js";
 import { createDevPublishSigner, type SignerMode } from "../../utils/deploy/signerMode.js";
@@ -243,7 +243,7 @@ export function DecentralizeScreen({
                 <>
                     <Callout tone="accent" title="About This Command">
                         <Text>
-                            Republishes a static site as a .dot site — either mirrored from a live
+                            Republishes a static site as a DotNS site — either mirrored from a live
                             https URL or uploaded from a local build directory. Press Ctrl+C any
                             time to cancel.
                         </Text>
@@ -349,7 +349,7 @@ export function DecentralizeScreen({
                         }
                         prefill={domainRaw ?? ""}
                         externalError={domainError}
-                        validate={validateDomainInput}
+                        validate={(raw) => validateDomainInput(raw, getEnvTld(env))}
                         onSubmit={(value) => {
                             setDomainError(null);
                             setDomainRaw(value);
@@ -409,7 +409,7 @@ export function DecentralizeScreen({
                             {
                                 value: false,
                                 label: "no",
-                                hint: "just register the .dot name (DotNS only)",
+                                hint: `just register the .${getEnvTld(env)} name (DotNS only)`,
                             },
                         ]}
                         initialIndex={0}

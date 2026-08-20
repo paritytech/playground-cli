@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * `playground deploy-all` — deploy several `.dot` apps in ONE invocation, with
+ * `playground deploy-all` — deploy several DotNS apps in ONE invocation, with
  * builds/uploads running in parallel and on-chain signing serialized per signer
  * account (see `utils/deploy/signingGate.ts`). This is the parallel counterpart
  * to `playground deploy`: the single-app command is unchanged.
@@ -53,6 +53,8 @@ import {
     DEFAULT_ENV,
     ENV_FLAG_CHOICES,
     type Env,
+    getChainConfig,
+    getEnvTld,
     resolveLegacyEnv,
 } from "../../config.js";
 import { NO_SESSION_HEADLESS_ERROR } from "../deploy/signerNotice.js";
@@ -75,7 +77,7 @@ const DEFAULT_CONCURRENCY = 3;
 
 export const deployAllCommand = new Command("deploy-all")
     .description(
-        "Deploy multiple .dot apps from a manifest in one run — builds in parallel, signs serially per account",
+        `Deploy multiple .${getEnvTld()} apps from a manifest in one run — builds in parallel, signs serially per account`,
     )
     .requiredOption("--manifest <path>", "JSON manifest listing the apps to deploy")
     .addOption(
@@ -115,6 +117,9 @@ export const deployAllCommand = new Command("deploy-all")
 
 async function runDeployAll(opts: DeployAllOpts): Promise<void> {
     const env: Env = resolveLegacyEnv(opts.env ?? DEFAULT_ENV);
+    // Fail fast on an unwired --env (non-zero, canonical message) BEFORE the
+    // identity gate's soft exit-0 can swallow it — same ordering as `deploy`.
+    getChainConfig(env);
     const mode = opts.signer;
     if (mode !== "dev" && mode !== "phone") {
         throw new Error("deploy-all requires --signer dev or --signer phone.");

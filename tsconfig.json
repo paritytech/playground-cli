@@ -17,6 +17,7 @@
     "include": [
         "src",
         "e2e",
+        "tools/register-e2e-fixtures.ts",
         "./.cdm/**/*"
     ]
 }

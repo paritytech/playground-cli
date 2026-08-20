@@ -25,6 +25,7 @@
  */
 
 import { parseArgs } from "node:util";
+import { getEnvTld } from "../src/config.js";
 import { destroyConnection } from "../src/utils/connection.js";
 import { checkAllowance, ensureAllowance } from "../src/utils/account/allowance.js";
 import { publishToPlayground, normalizeDomain } from "../src/utils/deploy/playground.js";
@@ -34,7 +35,10 @@ import { SIGNER, E2E_DOMAINS } from "../e2e/cli/fixtures/accounts.js";
 import { destroyTestClient, getTestClient } from "../e2e/cli/helpers/chain.js";
 import { fundAccountIfLow } from "../e2e/cli/setup/fund.js";
 
-const DEFAULT_TEMPLATE_DOMAIN = "dot-cli-mod-fixture.dot";
+// This script publishes against the default env, so its TLD is the one every
+// fixture name carries (`.paseo` on paseo-next-v2).
+const TLD = getEnvTld();
+const DEFAULT_TEMPLATE_DOMAIN = `dot-cli-mod-fixture.${TLD}`;
 const DEFAULT_TEMPLATE_REPO = "https://github.com/paritytech/Rock-Paper-Scissors";
 const REGISTRY_READBACK_ATTEMPTS = 5;
 const REGISTRY_READBACK_DELAY_MS = 2_000;
@@ -66,21 +70,21 @@ function usage(): string {
 		"Usage: bun tools/register-e2e-fixtures.ts [--domain <domain>] [--suri <suri>]",
 		"",
 		"Fixtures:",
-		...FIXTURES.map((fixture) => `  ${normalizeDomain(fixture.domain).fullDomain}`),
+		...FIXTURES.map((fixture) => `  ${normalizeDomain(fixture.domain, TLD).fullDomain}`),
 	].join("\n");
 }
 
 function selectedFixtures(domain?: string): readonly Fixture[] {
 	if (!domain) return FIXTURES;
 
-	const requested = normalizeDomain(domain).fullDomain.toLowerCase();
+	const requested = normalizeDomain(domain, TLD).fullDomain.toLowerCase();
 	return FIXTURES.filter(
-		(fixture) => normalizeDomain(fixture.domain).fullDomain.toLowerCase() === requested,
+		(fixture) => normalizeDomain(fixture.domain, TLD).fullDomain.toLowerCase() === requested,
 	);
 }
 
 function describeFixture(fixture: Fixture): string {
-	const fullDomain = normalizeDomain(fixture.domain).fullDomain;
+	const fullDomain = normalizeDomain(fixture.domain, TLD).fullDomain;
 	return `${fullDomain}  repo=${fixture.repositoryUrl ?? "(none)"}`;
 }
 
@@ -163,7 +167,7 @@ async function registerFixture(
 	index: number,
 	total: number,
 ): Promise<void> {
-	const fullDomain = normalizeDomain(fixture.domain).fullDomain;
+	const fullDomain = normalizeDomain(fixture.domain, TLD).fullDomain;
 	const start = Date.now();
 	console.log(`[${index}/${total}] ${fullDomain}`);
 	console.log(`  repository  ${fixture.repositoryUrl ?? "(none)"}`);

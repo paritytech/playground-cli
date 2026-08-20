@@ -37,7 +37,7 @@ const {
         }>
     >(async () => ({
         domainName: "my-site",
-        fullDomain: "my-site.dot",
+        fullDomain: "my-site.paseo",
         cid: "bafysite",
         ipfsCid: "bafyipfs",
     })),
@@ -74,7 +74,7 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
     getCachedAllocation: vi.fn(async () => ({ tag: "BulletInAllowance" })),
     requestResourceAllocation: vi.fn(),
 }));
-import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import type { ResolvedSigner } from "../signer.js";
 import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 import type { DecentralizeLogEvent } from "./run.js";
@@ -134,7 +134,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
         await runDecentralize({
             source: { kind: "url", url: "https://example.com" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "phone",
             userSigner: sessionSigner,
             env: "paseo-next-v2",
@@ -160,7 +160,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
         await runDecentralize({
             source: { kind: "url", url: "https://example.com" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "dev",
             userSigner: null,
             env: "paseo-next-v2",
@@ -183,7 +183,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
         await runDecentralize({
             source: { kind: "path", directory: "./dist" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "dev",
             userSigner: null,
             env: "paseo-next-v2",
@@ -205,7 +205,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
         await runDecentralize({
             source: { kind: "path", directory: "./dist" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "phone",
             userSigner: sessionSigner,
             env: "paseo-next-v2",
@@ -239,7 +239,7 @@ describe("runDecentralize — playground publish metadata", () => {
         const outcome = await runDecentralize({
             source: { kind: "path", directory: "./dist" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "dev",
             userSigner: null,
             publishToPlayground: true,
@@ -263,7 +263,7 @@ describe("runDecentralize — playground publish metadata", () => {
         await runDecentralize({
             source: { kind: "path", directory: "./dist" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "dev",
             userSigner: null,
             publishToPlayground: true,
@@ -284,7 +284,7 @@ describe("runDecentralize — playground publish metadata", () => {
         await runDecentralize({
             source: { kind: "url", url: "https://example.com" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "dev",
             userSigner: null,
             publishToPlayground: true,
@@ -326,7 +326,7 @@ describe("runDecentralize — large-site warning", () => {
         return runDecentralize({
             source: { kind: "url", url: "https://example.com" },
             label: "my-site",
-            fullDomain: "my-site.dot",
+            fullDomain: "my-site.paseo",
             mode: "dev",
             userSigner: null,
             env: "paseo-next-v2",

@@ -54,10 +54,10 @@ describe("clampConcurrency", () => {
 describe("runParallelDeploys", () => {
     it("deploys every app and returns results in input order", async () => {
         runDeployMock.mockImplementation(async (opts: any) => ({
-            fullDomain: `${opts.domain}.dot`,
+            fullDomain: `${opts.domain}.paseo`,
             appCid: `cid-${opts.domain}`,
             approvalsRequested: [],
-            appUrl: `https://${opts.domain}.dot.li`,
+            appUrl: `https://${opts.domain}.paseo.li`,
         }));
 
         const apps = [app("c"), app("a"), app("b")];
@@ -89,10 +89,10 @@ describe("runParallelDeploys", () => {
                 signingActive -= 1;
             });
             return {
-                fullDomain: `${opts.domain}.dot`,
+                fullDomain: `${opts.domain}.paseo`,
                 appCid: "cid",
                 approvalsRequested: [],
-                appUrl: "https://x.dot.li",
+                appUrl: "https://x.paseo.li",
             };
         });
 
@@ -117,10 +117,10 @@ describe("runParallelDeploys", () => {
                 active -= 1;
             });
             return {
-                fullDomain: `${opts.domain}.dot`,
+                fullDomain: `${opts.domain}.paseo`,
                 appCid: "cid",
                 approvalsRequested: [],
-                appUrl: "https://x.dot.li",
+                appUrl: "https://x.paseo.li",
             };
         });
 
@@ -143,10 +143,10 @@ describe("runParallelDeploys", () => {
             await new Promise((r) => setTimeout(r, 0));
             inFlight -= 1;
             return {
-                fullDomain: `${opts.domain}.dot`,
+                fullDomain: `${opts.domain}.paseo`,
                 appCid: "cid",
                 approvalsRequested: [],
-                appUrl: "https://x.dot.li",
+                appUrl: "https://x.paseo.li",
             };
         });
 
@@ -164,10 +164,10 @@ describe("runParallelDeploys", () => {
         runDeployMock.mockImplementation(async (opts: any) => {
             if (opts.domain === "b") throw new Error("nonce too low");
             return {
-                fullDomain: `${opts.domain}.dot`,
+                fullDomain: `${opts.domain}.paseo`,
                 appCid: "cid",
                 approvalsRequested: [],
-                appUrl: "https://x.dot.li",
+                appUrl: "https://x.paseo.li",
             };
         });
 
@@ -189,10 +189,10 @@ describe("runParallelDeploys", () => {
 
     it("captures a buildRunOptions failure as a failed app, not a thrown batch", async () => {
         runDeployMock.mockResolvedValue({
-            fullDomain: "a.dot",
+            fullDomain: "a.paseo",
             appCid: "cid",
             approvalsRequested: [],
-            appUrl: "https://a.dot.li",
+            appUrl: "https://a.paseo.li",
         });
 
         const summary = await runParallelDeploys({

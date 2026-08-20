@@ -38,7 +38,14 @@ import React from "react";
 import { render } from "ink";
 import { runCliCommand } from "../../cli-runtime.js";
 import { errorMessage, withSpan } from "../../telemetry.js";
-import { DEFAULT_ENV, ENV_FLAG_CHOICES, type Env, resolveLegacyEnv } from "../../config.js";
+import {
+    DEFAULT_ENV,
+    ENV_FLAG_CHOICES,
+    type Env,
+    getChainConfig,
+    getEnvTld,
+    resolveLegacyEnv,
+} from "../../config.js";
 import { resolveSigner, type ResolvedSigner, SignerNotAvailableError } from "../../utils/signer.js";
 import { resolveDomain } from "../../utils/decentralize/domain.js";
 import { prepareLocalDirectory } from "../../utils/decentralize/local.js";
@@ -99,7 +106,7 @@ export function assertTagRequiresPlayground(opts: {
 export const decentralizeCommand = new Command("decentralize")
     .description(
         "Mirror a live static site (or upload a local build directory) to Polkadot Bulletin " +
-            "and register a .dot name pointing at it",
+            `and register a .${getEnvTld()} name pointing at it`,
     )
     .option(
         "--site <url>",
@@ -113,7 +120,7 @@ export const decentralizeCommand = new Command("decentralize")
     )
     .option(
         "--dot <name>",
-        "DotNS domain (with or without `.dot`). Omit to auto-generate a free random name.",
+        `DotNS domain (with or without .${getEnvTld()}). Omit to auto-generate a free random name.`,
     )
     .addOption(
         // Same single-sourced choices + DEFAULT_ENV as deploy/deploy-all so all
@@ -148,6 +155,10 @@ export const decentralizeCommand = new Command("decentralize")
     .action(async (opts: DecentralizeOpts) =>
         runCliCommand("decentralize", { hardExit: true }, async () => {
             const env: Env = resolveLegacyEnv(opts.env);
+            // Fail fast on an unwired --env (non-zero, canonical message)
+            // BEFORE the identity gate's soft exit-0 can swallow it — same
+            // ordering as `playground deploy`.
+            getChainConfig(env);
 
             // Builder-identity gate (any signer mode): only revealed builders
             // who joined the competition may decentralize. Blocked is a soft

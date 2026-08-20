@@ -14,13 +14,17 @@
 // limitations under the License.
 
 import { randomBytes } from "node:crypto";
+import { KNOWN_TLDS } from "../../config.js";
 
 /**
  * Build the default target-directory name for `dot mod`: a slugified domain
  * with a short random suffix so repeated mods of the same app don't collide.
+ * TLD-generic: registry domains carry the per-env DotNS TLD (`cool-app.paseo`
+ * on paseo-next-v2), and none of the known TLDs belongs in the directory name.
  */
 export function defaultRepoName(domain: string): string {
-    return slugify(domain.replace(/\.dot$/, "")) + "-" + randomBytes(3).toString("hex");
+    const label = domain.replace(new RegExp(`\\.(${KNOWN_TLDS.join("|")})$`, "i"), "");
+    return slugify(label) + "-" + randomBytes(3).toString("hex");
 }
 
 function slugify(s: string): string {

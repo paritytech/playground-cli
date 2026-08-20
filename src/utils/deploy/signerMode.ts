@@ -47,7 +47,7 @@
  *     defaults to caller, which is the user's H160 anyway.
  */
 
-import { DEFAULT_MNEMONIC, type DeployOptions } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC, type DeployOptions } from "bulletin-deploy";
 import { ss58Encode } from "@parity/product-sdk-address";
 import type { CloudStorageApi } from "@parity/product-sdk-cloud-storage";
 import { seedToAccount } from "@parity/product-sdk-keys";

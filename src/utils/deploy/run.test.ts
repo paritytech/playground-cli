@@ -35,13 +35,13 @@ const {
         }>
     >(async () => ({
         domainName: "my-app",
-        fullDomain: "my-app.dot",
+        fullDomain: "my-app.paseo",
         cid: "bafyapp",
         ipfsCid: "bafyipfs",
     })),
     publishToPlaygroundMock: vi.fn(async () => ({
         metadataCid: "bafymeta",
-        fullDomain: "my-app.dot",
+        fullDomain: "my-app.paseo",
         metadata: {},
     })),
     runBuildMock: vi.fn(async () => ({ config: {} as any, outputDir: "/tmp/dist" })),
@@ -62,9 +62,11 @@ const {
 vi.mock("./storage.js", () => ({ runStorageDeploy }));
 vi.mock("./playground.js", () => ({
     publishToPlayground: publishToPlaygroundMock,
-    normalizeDomain: (d: string) => {
-        const label = d.replace(/\.dot$/, "");
-        return { label, fullDomain: `${label}.dot` };
+    // Mirrors the real TLD-aware signature: runDeploy resolves the tld via
+    // getEnvTld(options.env) ("paseo" for the default env) and threads it in.
+    normalizeDomain: (d: string, tld: string) => {
+        const label = d.replace(new RegExp(`\\.${tld}$`), "");
+        return { label, fullDomain: `${label}.${tld}` };
     },
 }));
 vi.mock("../build/index.js", () => ({
@@ -106,7 +108,7 @@ vi.mock("./bulletinAuthContext.js", () => ({
 }));
 const bulletinApi = { marker: "bulletin-api" } as any;
 
-import { DEFAULT_MNEMONIC } from "@parity/polkadot-app-deploy";
+import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { runDeploy, type DeployEvent } from "./run.js";
 import { DEV_PUBLISH_ADDRESS } from "./signerMode.js";
 import type { ResolvedSigner } from "../signer.js";
@@ -168,7 +170,7 @@ describe("runDeploy", () => {
             onEvent: push,
         });
 
-        expect(outcome.fullDomain).toBe("my-app.dot");
+        expect(outcome.fullDomain).toBe("my-app.paseo");
         expect(outcome.approvalsRequested).toEqual([]);
         expect(publishToPlaygroundMock).not.toHaveBeenCalled();
 
@@ -520,7 +522,7 @@ describe("runDeploy", () => {
             storageWhileHeld.push(held);
             return {
                 domainName: "my-app",
-                fullDomain: "my-app.dot",
+                fullDomain: "my-app.paseo",
                 cid: "bafyapp",
                 ipfsCid: "bafyipfs",
             };
@@ -568,7 +570,7 @@ describe("runDeploy", () => {
             userSigner: null,
             onEvent: push,
         });
-        expect(outcome.fullDomain).toBe("my-app.dot");
+        expect(outcome.fullDomain).toBe("my-app.paseo");
         expect(runStorageDeploy).toHaveBeenCalledTimes(1);
     });
 });
