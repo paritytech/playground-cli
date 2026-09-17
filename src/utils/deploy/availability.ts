@@ -51,6 +51,46 @@ async function createDotNS(): Promise<DotNSInstance> {
 }
 
 /**
+ * DotNS contract addresses for `env`, read from bulletin-deploy's own
+ * `environments.json`.
+ *
+ * These addresses are bulletin-deploy's to own (our `config.ts` has never
+ * stored them), and they MUST be passed to `connect()` — without them `DotNS`
+ * falls back to a built-in default map whose `POP_RULES` has no code on
+ * paseo-next-v2, and connect()'s ABI-profile probe then fails with
+ * "No contract deployed at this address".
+ *
+ * That was silent until bulletin-deploy 0.16: before it, `connect()` did not
+ * probe POP_RULES, so this call site got away with passing only `rpc` while
+ * `runStorageDeploy` (which passes `env`) resolved them properly. Two call
+ * sites, two levels of configuration — keep them in sync.
+ *
+ * Returns undefined if the env is absent upstream, so `connect()` keeps its own
+ * defaults rather than being handed an empty map. `config.test.ts`'s divergence
+ * guard is the thing that stops that going unnoticed.
+ */
+async function dotnsContractsFor(
+    env: Env | undefined,
+): Promise<Record<string, string> | undefined> {
+    bulletinDeployPromise ??= import("bulletin-deploy");
+    const { loadEnvironments } = await bulletinDeployPromise;
+    const { doc } = await loadEnvironments();
+    const entries: unknown = Array.isArray(doc)
+        ? doc
+        : ((doc as { environments?: unknown }).environments ?? []);
+    if (!Array.isArray(entries)) return undefined;
+    const wanted = getChainConfig(env).env;
+    const match = entries.find(
+        (e): e is { contracts?: Record<string, string> } =>
+            typeof e === "object" &&
+            e !== null &&
+            ((e as { id?: string }).id ?? (e as { name?: string }).name) === wanted,
+    );
+    const contracts = match?.contracts;
+    return contracts && Object.keys(contracts).length > 0 ? contracts : undefined;
+}
+
+/**
  * What polkadot-app-deploy will submit on-chain, used to render a correct phone-tap
  * count BEFORE the user confirms.
  *
@@ -128,11 +168,21 @@ export async function checkDomainAvailability(
     // Silence is narrowed to the `connect()` call ONLY — `checkOwnership`
     // below runs with normal console semantics so any unexpected log surfaces.
     const dotns = await createDotNS();
+    // Resolved BEFORE silencing: this is a local JSON read, not part of the
+    // connect() call the silence is scoped to, and swallowing its output would
+    // widen the suppression window documented above.
+    const contracts = await dotnsContractsFor(options.env);
     try {
         const restore = silenceConsole();
         try {
             await withTimeout(
-                dotns.connect({ rpc: cfg.assetHubRpc }),
+                dotns.connect({
+                    rpc: cfg.assetHubRpc,
+                    // Both are required for connect()'s ABI-profile probe to
+                    // reach the right contracts — see `dotnsContractsFor`.
+                    contracts,
+                    environmentId: cfg.env,
+                }),
                 options.timeoutMs ?? 30_000,
                 "DotNS connect",
             );

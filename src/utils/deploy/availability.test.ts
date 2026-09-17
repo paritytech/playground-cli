@@ -41,6 +41,20 @@ vi.mock("bulletin-deploy", () => ({
             disconnect,
         };
     }),
+    // `availability.ts` reads the env's DotNS contract map from upstream and
+    // passes it to `connect()` — without it DotNS falls back to a default map
+    // whose POP_RULES has no code on paseo-next-v2. Mirror the real shape so
+    // the connect() assertions below see the same argument production does.
+    loadEnvironments: vi.fn(async () => ({
+        doc: {
+            environments: [
+                {
+                    id: "paseo-next-v2",
+                    contracts: { POP_RULES: "0x747B456bE03aec0b42bd85C51513730FBD45DA31" },
+                },
+            ],
+        },
+    })),
 }));
 
 // A realistic dev SS58 → H160 pair so the tests exercise the real derivation.

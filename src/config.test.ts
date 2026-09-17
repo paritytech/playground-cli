@@ -104,6 +104,22 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
                 expect(cfg.bulletinGateway).toBe(`${upstreamEnv(envId)?.ipfs}/ipfs/`);
             });
 
+            // `availability.ts` reads these at RUNTIME and hands them to
+            // `DotNS.connect()`. Without them DotNS falls back to a built-in
+            // default map whose POP_RULES has no code here, and connect()'s
+            // ABI-profile probe fails with "No contract deployed at this
+            // address" — which surfaces to the user as an unexplained deploy
+            // failure. Guard their presence so an upstream catalog change
+            // fails in CI instead. POP_RULES specifically is the one the
+            // profile probe dereferences.
+            it("upstream ships the DotNS contract map the availability probe needs", () => {
+                const contracts = upstreamEnv(envId)?.contracts;
+                expect(contracts, `no contracts map for ${envId}`).toBeDefined();
+                expect(contracts?.POP_RULES, `no POP_RULES for ${envId}`).toMatch(
+                    /^0x[0-9a-fA-F]{40}$/,
+                );
+            });
+
             it("faucet URL matches upstream popSelfServe.faucetUrl", () => {
                 // The `?parachain=<id>` form is load-bearing: `?network=pah`
                 // drips to the PUBLIC Paseo Asset Hub (para 1000), not this
