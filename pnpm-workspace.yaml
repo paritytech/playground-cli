@@ -18,9 +18,14 @@ allowBuilds:
   node-datachannel: false
 
 minimumReleaseAgeExclude:
-  # 0.15.0 stable published 2026-08-12; it is byte-identical to the validated
-  # rc.2 source (rc.3 was test-script-only), so we opt past the min-age window.
-  # Drop once it ages out.
+  # 0.18.4: taken to follow the DotNS ABI generations (0.15.0 only knew the
+  # generation that still had PopRules.startingPrice(), so every deploy reverted
+  # — see the generations note in CLAUDE.md). Validated by diffing the published
+  # 0.15.0 and 0.18.4 tarballs: index exports are additive only, every
+  # DeployOptions field we pass still exists, and the deploy banner strings the
+  # progress parser matches are unchanged; then confirmed live — a deploy that
+  # previously reverted at startingPrice now completes storage + DotNS.
+  # Drop once it ages past the min-age window.
   - "bulletin-deploy@0.18.4"
   - "@parity/dotns-cli@0.8.0"
   # The @novasamatech/* 0.8.11 family (pulled transitively by
