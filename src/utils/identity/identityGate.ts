@@ -23,20 +23,20 @@
  * act for them.
  *
  * "Revealed" is decided exactly as the playground-app decides it
- * (`hasRevealedIdentity`): `playground-registry.getRootAccount(productH160)`
+ * (`hasRevealedIdentity`): `playground-identity.getRootAccount(productH160)`
  * returns a NON-zero bytes32. The contract `unwrap_or`s a missing binding to 32
  * zero bytes and never reverts, so the zero sentinel IS the "anonymous" answer.
  *
  * This module is pure logic (no React/Ink). The session's product H160 is
  * derived signer-free from the persisted login (`findSession` ->
  * `deriveSessionAddresses`), and the read uses the keyless revive origin
- * (`getReadOnlyRegistryContract`), so evaluating the gate needs neither a phone
+ * (`getReadOnlyIdentityContract`), so evaluating the gate needs neither a phone
  * tap nor a mapped/funded account.
  */
 
 import type { PolkadotClient } from "polkadot-api";
 import { findSession, deriveSessionAddresses } from "../auth.js";
-import { getReadOnlyRegistryContract } from "../registry.js";
+import { getVerifierContract } from "../registry.js";
 
 export type IdentityGateResult =
     | { status: "revealed"; productH160: `0x${string}` }
@@ -47,20 +47,25 @@ export type IdentityGateResult =
 /** Blocked outcomes — everything except `revealed`. */
 export type BlockedIdentityStatus = "not-logged-in" | "anonymous" | "unverifiable";
 
-interface RootQueryResult {
+interface VerifiedQueryResult {
     success: boolean;
+    /** `true` when the wired verifier accepts this account. */
     value?: unknown;
 }
 
 /**
- * Minimal structural view of the registry handle. `getReadOnlyRegistryContract`
+ * Minimal structural view of the VERIFIER handle. `getVerifierContract`
  * returns a runtime Proxy (via `suppressReviveTraceNoise`) whose full typing we
- * don't want to depend on here. The generated ABI does expose `getRootAccount`
- * (`.cdm/contracts.d.ts`, `response: SizedHex<32>` — i.e. a hex string); we
- * narrow to just the one read method we call.
+ * don't want to depend on here; we narrow to the one read method we call.
+ *
+ * ⚠️ This narrowing is a cast, so `tsc` CANNOT tell you when the underlying
+ * contract stops having the method. Identity moved off the registry in registry
+ * #525, and the gate then asked the spine rather than the verifier the registry
+ * consults — blocking publishes the chain would have accepted. Whatever this is
+ * pointed at, it must be the contract `registry.getVerifier()` names.
  */
-export interface IdentityRegistry {
-    getRootAccount: { query(account: `0x${string}`): Promise<RootQueryResult> };
+export interface PersonhoodVerifier {
+    isVerified: { query(account: `0x${string}`): Promise<VerifiedQueryResult> };
 }
 
 interface GateOptions {
@@ -68,13 +73,20 @@ interface GateOptions {
     attempts?: number;
     /** Delay between retries in ms. Defaults to 250. */
     delayMs?: number;
-    /**
-     * Pre-resolved registry handle. Callers that already built one (e.g. `mod`)
-     * pass it to avoid a second meta-registry resolution + Revive dry-run. When
-     * omitted, the gate resolves its own from `rawAssetHubClient`.
-     */
-    registry?: IdentityRegistry;
 }
+
+/**
+ * ⚠️ There is deliberately NO option to inject a pre-resolved contract here.
+ *
+ * There used to be one, so a caller holding a registry handle could skip a
+ * second meta-registry resolution. It cannot work any more: the gate must read
+ * `registry.getVerifier()` and then query a DIFFERENT contract, so no handle a
+ * caller already has is the right one. `mod` passed its registry anyway — the
+ * narrowing is a cast, so `tsc` saw nothing — and the gate collapsed to
+ * "unverifiable", telling users their builder status couldn't be checked on a
+ * perfectly healthy chain. Resolving internally makes that unrepresentable.
+ * Tests mock `getVerifierContract` instead.
+ */
 
 function describe(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
@@ -82,27 +94,8 @@ function describe(err: unknown): string {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Whether a `getRootAccount` result represents an anonymous (unbound) account.
- *
- * Robust to the representations a bytes32 contract output can arrive as: a
- * `0x`-prefixed (or bare) hex string, a `Uint8Array`/number array, or
- * null/undefined (treated as anonymous). Throws on anything unrecognized so the
- * orchestrator degrades to `unverifiable` rather than guessing.
- */
-export function isAnonymousRoot(value: unknown): boolean {
-    if (value === null || value === undefined) return true;
-    if (typeof value === "string") {
-        const hex = value.slice(0, 2).toLowerCase() === "0x" ? value.slice(2) : value;
-        return hex.length === 0 || /^0+$/.test(hex);
-    }
-    if (value instanceof Uint8Array) return value.every((b) => b === 0);
-    if (Array.isArray(value)) return value.every((b) => Number(b) === 0);
-    throw new Error(`Unrecognized root account representation: ${typeof value}`);
-}
-
-async function queryRoot(
-    registry: IdentityRegistry,
+async function queryVerified(
+    verifier: PersonhoodVerifier,
     account: `0x${string}`,
     attempts: number,
     delayMs: number,
@@ -110,9 +103,9 @@ async function queryRoot(
     let lastError: unknown;
     for (let i = 0; i < attempts; i++) {
         try {
-            const res = await registry.getRootAccount.query(account);
+            const res = await verifier.isVerified.query(account);
             if (res.success) return res.value;
-            lastError = new Error("registry.getRootAccount dry-run was rejected (success=false)");
+            lastError = new Error("verifier.isVerified dry-run was rejected (success=false)");
         } catch (err) {
             lastError = err;
         }
@@ -151,13 +144,18 @@ export async function checkIdentityGate(
     }
 
     try {
-        const registry =
-            opts.registry ??
-            ((await getReadOnlyRegistryContract(rawAssetHubClient)) as unknown as IdentityRegistry);
-        const root = await queryRoot(registry, productH160, attempts, delayMs);
-        return isAnonymousRoot(root)
-            ? { status: "anonymous", productH160 }
-            : { status: "revealed", productH160 };
+        // Ask the verifier the registry itself consults — NOT the identity
+        // spine. `registry::require_revealed()` delegates to whatever
+        // `getVerifier()` names, so querying anything else means the CLI can
+        // refuse a publish the chain would accept (which it did: the open
+        // verifier returns true for everyone while the spine had no binding).
+        const verifier = (await getVerifierContract(
+            rawAssetHubClient,
+        )) as unknown as PersonhoodVerifier;
+        const verified = await queryVerified(verifier, productH160, attempts, delayMs);
+        return verified === true
+            ? { status: "revealed", productH160 }
+            : { status: "anonymous", productH160 };
     } catch (err) {
         return { status: "unverifiable", detail: describe(err) };
     }

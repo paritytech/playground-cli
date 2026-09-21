@@ -17,7 +17,12 @@
  * Playground registry contract access.
  */
 
-import { ContractManager, type CdmJson } from "@parity/product-sdk-contracts";
+import {
+    ContractManager,
+    createContractFromClient,
+    type AbiEntry,
+    type CdmJson,
+} from "@parity/product-sdk-contracts";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { getRegistryAddress } from "@parity/cdm-env";
 import type { PolkadotClient } from "polkadot-api";
@@ -26,6 +31,7 @@ import type { ResolvedSigner } from "./signer.js";
 import { getAssetHubDescriptor } from "./descriptors.js";
 import { unwrapResult } from "./tx.js";
 import {
+    PLAYGROUND_IDENTITY_CONTRACT,
     PLAYGROUND_REGISTRY_CONTRACT,
     suppressReviveTraceNoise,
     withoutReviveTraceNoise,
@@ -96,7 +102,7 @@ async function liveManager(
         return unwrapResult(
             await withoutReviveTraceNoise(() =>
                 ContractManager.fromLiveClient(manifest, rawClient, getAssetHubDescriptor(env), {
-                    libraries: [PLAYGROUND_REGISTRY_CONTRACT],
+                    libraries: [PLAYGROUND_REGISTRY_CONTRACT, PLAYGROUND_IDENTITY_CONTRACT],
                     defaultOrigin: origin,
                     ...(signer ? { defaultSigner: signer.signer } : {}),
                 }),
@@ -134,4 +140,82 @@ export async function getRegistryContract(rawClient: PolkadotClient, signer: Res
 export async function getReadOnlyRegistryContract(rawClient: PolkadotClient) {
     const manager = await liveManager(rawClient, READ_ONLY_QUERY_ORIGIN);
     return suppressReviveTraceNoise(manager.getContract(PLAYGROUND_REGISTRY_CONTRACT));
+}
+
+/**
+ * Minimal ABI for the personhood-verifier interface: the one read the gate
+ * needs. Deliberately not the full open-verifier ABI — any verifier
+ * implementation exposes `isVerified`, and narrowing to it keeps this working
+ * against implementations that do not exist yet.
+ */
+const VERIFIER_ABI = [
+    {
+        inputs: [{ name: "_account", type: "address" }],
+        name: "isVerified",
+        outputs: [{ name: "", type: "bool" }],
+        stateMutability: "view",
+        type: "function",
+    },
+] as const;
+
+/**
+ * Read-only handle to whichever verifier the REGISTRY is currently wired to.
+ *
+ * The registry's `require_revealed()` delegates to `getVerifier()`, so that —
+ * not the identity spine — is the authority on whether a publish is allowed.
+ * On the current deployment it is the open verifier, whose `is_verified()`
+ * returns `true` for every account; on a competition deployment it is the
+ * spine, which returns false for an unrevealed caller. Asking the wired
+ * verifier is therefore correct in BOTH regimes with no flag to keep in sync.
+ *
+ * Load-bearing: **ask the verifier a question, never compare its address.**
+ * ADR-0011 names three implementations (PoP spine, attendance SBT, open
+ * verifier) and an operator picks one per event, so `verifier === <known
+ * address>` is correct only until the next one. We resolve the address at
+ * runtime and attach the minimal ABI to it via `createContractFromClient`,
+ * which works for implementations that are not in our `cdm.json` at all.
+ */
+export async function getVerifierContract(rawClient: PolkadotClient) {
+    const registry = await getReadOnlyRegistryContract(rawClient);
+    const res = await (
+        registry as unknown as {
+            getVerifier: { query(): Promise<{ success: boolean; value?: unknown }> };
+        }
+    ).getVerifier.query();
+    if (!res?.success || typeof res.value !== "string") {
+        throw new Error(
+            "Could not read registry.getVerifier() — cannot determine which personhood " +
+                "verifier gates publishing on this deployment.",
+        );
+    }
+    return suppressReviveTraceNoise(
+        createContractFromClient(
+            rawClient,
+            getAssetHubDescriptor(getChainConfig().env),
+            res.value as `0x${string}`,
+            VERIFIER_ABI as unknown as AbiEntry[],
+            { defaultOrigin: READ_ONLY_QUERY_ORIGIN },
+        ),
+    );
+}
+
+/**
+ * Read-only handle to the playground IDENTITY contract (the personhood spine).
+ *
+ * ⚠️ CURRENTLY UNUSED, and deliberately so. The builder gate used to read
+ * `getRootAccount` here; it now asks `getVerifierContract()` instead, because
+ * the registry consults the verifier it was wired with and the spine is only
+ * one possible implementation. Kept because the spine is a real contract we
+ * will need for a reveal / "become a builder" path — but do NOT reintroduce it
+ * as a gate: that is the bug this replaced.
+ *
+ * Identity moved out of the registry in registry #525 — `getRootAccount` is no
+ * longer a registry method, so the builder-identity gate must read it here or
+ * the call reverts on-chain. Same read-only contract as
+ * `getReadOnlyRegistryContract`: no signer, `READ_ONLY_QUERY_ORIGIN` as the
+ * dry-run origin, `.query()` only.
+ */
+export async function getReadOnlyIdentityContract(rawClient: PolkadotClient) {
+    const manager = await liveManager(rawClient, READ_ONLY_QUERY_ORIGIN);
+    return suppressReviveTraceNoise(manager.getContract(PLAYGROUND_IDENTITY_CONTRACT));
 }

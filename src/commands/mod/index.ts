@@ -22,7 +22,6 @@ import { getEnvTld } from "../../config.js";
 import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
 import { getReadOnlyRegistryContract } from "../../utils/registry.js";
-import type { IdentityRegistry } from "../../utils/identity/identityGate.js";
 import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import { AppBrowser, type AppEntry } from "./AppBrowser.js";
 import { SetupScreen } from "./SetupScreen.js";
@@ -64,13 +63,11 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
             getReadOnlyRegistryContract(client.raw.assetHub),
         );
 
-        // Builder-identity gate: modding is reserved for revealed builders who
-        // joined the competition. This also gates `playground init`, which
-        // delegates here. Reuse the registry we just resolved so the gate
-        // doesn't re-resolve it. Blocked is a soft outcome (yellow box, exit 0).
-        if (
-            await enforceIdentityGate(client.raw.assetHub, registry as unknown as IdentityRegistry)
-        ) {
+        // Builder-identity gate: modding is reserved for callers the wired
+        // personhood verifier accepts. This also gates `playground init`,
+        // which delegates here. Blocked is a soft outcome (yellow box, exit 0).
+        //
+        if (await enforceIdentityGate(client.raw.assetHub)) {
             process.exitCode = 0;
             return;
         }

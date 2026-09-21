@@ -19,15 +19,17 @@ import type { ResolvedSigner } from "./signer.js";
 import { getChainConfig } from "../config.js";
 import cdmJson from "../../cdm.json";
 
-const { fromLiveClientMock, getContractMock } = vi.hoisted(() => ({
+const { fromLiveClientMock, getContractMock, createContractFromClientMock } = vi.hoisted(() => ({
     fromLiveClientMock: vi.fn(),
     getContractMock: vi.fn(),
+    createContractFromClientMock: vi.fn(),
 }));
 
 vi.mock("@parity/product-sdk-contracts", () => ({
     ContractManager: {
         fromLiveClient: (...args: unknown[]) => fromLiveClientMock(...args),
     },
+    createContractFromClient: (...args: unknown[]) => createContractFromClientMock(...args),
 }));
 
 vi.mock("@parity/product-sdk-descriptors/paseo-asset-hub", () => ({
@@ -36,12 +38,19 @@ vi.mock("@parity/product-sdk-descriptors/paseo-asset-hub", () => ({
 
 vi.mock("./contractManifest.js", () => ({
     PLAYGROUND_REGISTRY_CONTRACT: "@w3s/playground-registry",
+    // Identity split out of the registry in registry #525; `liveManager` now
+    // resolves both names, so the mock must expose both.
+    PLAYGROUND_IDENTITY_CONTRACT: "@w3s/playground-identity",
     suppressReviveTraceNoise: (contract: unknown) => contract,
     // Pass-through wrapper so the live resolution runs unchanged in tests.
     withoutReviveTraceNoise: (fn: () => unknown) => fn(),
 }));
 
-import { getRegistryContract, getReadOnlyRegistryContract } from "./registry.js";
+import {
+    getRegistryContract,
+    getReadOnlyRegistryContract,
+    getVerifierContract,
+} from "./registry.js";
 
 // pallet-revive's keyless pallet account ("modlpy/reviv" + 20 zero bytes),
 // frozen here so a regression back to Alice (or any other origin) fails loudly.
@@ -61,6 +70,8 @@ const fakeSigner: ResolvedSigner = {
 beforeEach(() => {
     fromLiveClientMock.mockReset();
     getContractMock.mockReset();
+    createContractFromClientMock.mockReset();
+    createContractFromClientMock.mockReturnValue({ isVerified: { query: vi.fn() } });
     getContractMock.mockReturnValue({ publish: { tx: vi.fn() } });
     // contracts@0.9 `fromLiveClient` resolves a `Result<ContractManager, …>`.
     fromLiveClientMock.mockResolvedValue({ ok: true, value: { getContract: getContractMock } });
@@ -77,7 +88,7 @@ describe("getRegistryContract", () => {
             rawClient,
             EXPECTED_ASSET_DESCRIPTOR,
             {
-                libraries: ["@w3s/playground-registry"],
+                libraries: ["@w3s/playground-registry", "@w3s/playground-identity"],
                 defaultOrigin: fakeSigner.address,
                 defaultSigner: fakeSigner.signer,
             },
@@ -106,7 +117,7 @@ describe("getReadOnlyRegistryContract", () => {
             rawClient,
             EXPECTED_ASSET_DESCRIPTOR,
             {
-                libraries: ["@w3s/playground-registry"],
+                libraries: ["@w3s/playground-registry", "@w3s/playground-identity"],
                 defaultOrigin: READ_ONLY_ORIGIN,
             },
         );
@@ -119,5 +130,68 @@ describe("getReadOnlyRegistryContract", () => {
         fromLiveClientMock.mockRejectedValue(new Error("registry unavailable"));
 
         await expect(getReadOnlyRegistryContract({} as any)).rejects.toThrow(/MetaRegistryFailure/);
+    });
+});
+
+describe("getVerifierContract", () => {
+    const withVerifier = (res: { success: boolean; value?: unknown }) =>
+        getContractMock.mockReturnValue({ getVerifier: { query: async () => res } });
+
+    it("attaches the minimal ABI to the address the registry reports", async () => {
+        const rawClient = {} as any;
+        withVerifier({ success: true, value: "0x904c2BFc3d38F2FA5E755c95CEaA4929F8a23255" });
+
+        await getVerifierContract(rawClient);
+
+        expect(createContractFromClientMock).toHaveBeenCalledWith(
+            rawClient,
+            EXPECTED_ASSET_DESCRIPTOR,
+            "0x904c2BFc3d38F2FA5E755c95CEaA4929F8a23255",
+            [
+                {
+                    inputs: [{ name: "_account", type: "address" }],
+                    name: "isVerified",
+                    outputs: [{ name: "", type: "bool" }],
+                    stateMutability: "view",
+                    type: "function",
+                },
+            ],
+            { defaultOrigin: READ_ONLY_ORIGIN },
+        );
+    });
+
+    /**
+     * The load-bearing property from ADR-0011: ask the verifier a question,
+     * never compare (or hardcode) its address. An operator picks one of several
+     * implementations per deployment, so the address must come from the chain
+     * on every call. If someone "optimises" this to a constant, this fails.
+     */
+    it("follows whatever getVerifier() returns rather than a hardcoded address", async () => {
+        const rawClient = {} as any;
+        withVerifier({ success: true, value: "0x1111111111111111111111111111111111111111" });
+        await getVerifierContract(rawClient);
+        withVerifier({ success: true, value: "0x2222222222222222222222222222222222222222" });
+        await getVerifierContract(rawClient);
+
+        const used = createContractFromClientMock.mock.calls.map((c) => c[2]);
+        expect(used).toEqual([
+            "0x1111111111111111111111111111111111111111",
+            "0x2222222222222222222222222222222222222222",
+        ]);
+    });
+
+    it("throws a clear error when the getVerifier dry-run is rejected", async () => {
+        withVerifier({ success: false });
+
+        await expect(getVerifierContract({} as any)).rejects.toThrow(/getVerifier/);
+        expect(createContractFromClientMock).not.toHaveBeenCalled();
+    });
+
+    /** A non-address payload must fail loudly, not resolve a garbage contract. */
+    it("throws when getVerifier returns something that is not an address", async () => {
+        withVerifier({ success: true, value: { unexpected: "shape" } });
+
+        await expect(getVerifierContract({} as any)).rejects.toThrow(/getVerifier/);
+        expect(createContractFromClientMock).not.toHaveBeenCalled();
     });
 });
