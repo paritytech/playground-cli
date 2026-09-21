@@ -22,7 +22,8 @@
  * `getRegistryContract()`.
  * Phone publishing is signed by the user's product account so the contract's
  * `env::caller()` matches their address. Dev publishing is signed by the dev
- * account and may pass a claimed owner for the playground-app "myApps" view.
+ * account and is therefore itself the recorded owner (registry #525 removed
+ * the `owner` argument, so no path can name another account).
  *
  * We deliberately do NOT use `polkadot-app-deploy.deploy()` for the metadata
  * upload: `deploy()` unconditionally runs a DotNS `register()` +
@@ -113,20 +114,11 @@ export interface PublishToPlaygroundOptions {
     /**
      * Signer that submits the registry publish tx. In phone mode this is the
      * user's session signer and calls `publish(...)` (caller becomes owner).
-     * In dev mode this is a dev signer (Alice / `--suri`) and calls
-     * `publish(...)` with `is_dev_signer: true`; `claimedOwnerH160` carries the
-     * H160 to record as owner.
+     * In dev mode this is a dev signer (Alice / `--suri`) — and since registry
+     * #525 the caller is ALWAYS the recorded owner, so a dev-mode publish is
+     * owned by the dev account, not the logged-in user.
      */
     publishSigner: ResolvedSigner;
-    /**
-     * Optional H160 to record as the app owner via the contract's `owner`
-     * parameter. Used by dev mode + active session so the app shows in the
-     * user's MyApps view even though the tx is signed by Alice. `null` or
-     * omitted ⇒ contract defaults to caller (`publishSigner.address`
-     * translated to H160), which is correct for phone mode and pure-dev
-     * throwaway.
-     */
-    claimedOwnerH160?: `0x${string}` | null;
     /** Repository URL to record in metadata. `null` = omit the field entirely. */
     repositoryUrl: string | null;
     /**
@@ -160,7 +152,6 @@ export interface PublishToPlaygroundOptions {
      * records this bit so the playground-app filter doesn't need to fetch
      * each metadata JSON to know.
      */
-    isModdable?: boolean;
     /**
      * Domain (`<label>.<tld>`) the user modded this app from, or `""`/omitted if
      * this is a first-party publish. Recorded on-chain so the playground-app
@@ -185,7 +176,6 @@ export interface PublishToPlaygroundOptions {
      * `is_dev_signer` flag on `publish(...)`, which records the app without
      * awarding deploy XP or source-app mod XP.
      */
-    isDevSigner?: boolean;
 }
 
 export interface PublishToPlaygroundResult {
@@ -476,16 +466,6 @@ export async function publishToPlayground(
         "publish playground registry entry",
         { "cli.deploy.domain": fullDomain },
         async () => {
-            // Encode the Option<Address> owner parameter. None ⇒ contract
-            // defaults to env::caller(). Some(h160) ⇒ recorded as the app
-            // owner regardless of who signed the tx.
-            const owner = options.claimedOwnerH160
-                ? { isSome: true as const, value: options.claimedOwnerH160 }
-                : {
-                      isSome: false as const,
-                      value: "0x0000000000000000000000000000000000000000" as const,
-                  };
-
             let lastError: unknown;
             for (let attempt = 1; attempt <= MAX_REGISTRY_RETRIES; attempt++) {
                 try {
@@ -495,21 +475,30 @@ export async function publishToPlayground(
                     // The contract credits the source owner the mod XP off this
                     // argument, so an empty string records no lineage edge.
                     const moddedFromArg = moddedFrom ?? "";
-                    const isModdable = options.isModdable ?? false;
-                    const isDevSigner = options.isDevSigner ?? false;
-                    // contracts@0.9 dropped the separate `publishDev` method:
-                    // the dev-signer path is now the same `publish` call with
-                    // the trailing `is_dev_signer` boolean set. `true` records
-                    // the app without awarding mod XP (the former `publishDev`
-                    // behaviour); `false` is the normal user publish.
+                    // registry #525 narrowed `publish` to four arguments and
+                    // CHANGED THE SELECTOR — an older CLI hits the contract's
+                    // fallback and reverts, so this must move in lockstep with
+                    // the deployed registry.
+                    //
+                    // Dropped, and why each is safe to drop here:
+                    //   owner (Option<Address>) — no path may name an owner
+                    //     other than the caller any more. Dev-mode publishes are
+                    //     therefore owned by the DEV account, not the logged-in
+                    //     user: nothing can name a different owner, so a dev-signed
+                    //     deploy never lands in the user's MyApps view.
+                    //     The admin-only `importApp(domain, owner, publisher,
+                    //     visibility, metadata_uri)` is the only owner-naming
+                    //     path that remains.
+                    //   is_moddable — nothing read it (the moddable bonus moved
+                    //     in #286). `--moddable` still works: it is carried by
+                    //     `metadata.repository`, which is what `playground mod`
+                    //     actually reads.
+                    //   is_dev_signer — nothing read it (#525).
                     const result = await registry.publish.tx(
                         fullDomain,
                         metadataCid,
                         visibility,
-                        owner,
                         moddedFromArg,
-                        isModdable,
-                        isDevSigner,
                     );
                     if (!result.ok) {
                         const { deterministic, detail } = classifyRevert(result.error);

@@ -30,6 +30,7 @@ import { QuestPicker } from "./QuestPicker.js";
 import { defaultRepoName } from "../../utils/git/repoName.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { parseGitHubRepoUrl, type GitHubRepoRef } from "../../utils/mod/source.js";
+import { getAppMetadataUri, type MetadataUriReader } from "../../utils/mod/metadataUri.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
 import { editWithAgentStep } from "./nextSteps.js";
 import { shouldShowTutorialPrompt } from "./tutorialPromptHint.js";
@@ -227,14 +228,11 @@ async function resolveTargetDir(args: { domain: string }): Promise<string | null
     return fallback;
 }
 
-async function fetchAppMetadata(registry: any, domain: string): Promise<FetchedAppMetadata> {
-    const metaRes = await registry.getMetadataUri.query(domain);
-    if (!metaRes.success) {
-        throw new Error(
-            `Registry lookup for "${domain}" failed at dry-run (chain rejected the call)`,
-        );
-    }
-    const cid = metaRes.value.isSome ? metaRes.value.value : null;
+async function fetchAppMetadata(
+    registry: MetadataUriReader,
+    domain: string,
+): Promise<FetchedAppMetadata> {
+    const cid = await getAppMetadataUri(registry, domain);
     if (!cid) throw new Error(`App "${domain}" not found in registry`);
     return await fetchBulletinJson<FetchedAppMetadata>(cid, getBulletinGateway());
 }

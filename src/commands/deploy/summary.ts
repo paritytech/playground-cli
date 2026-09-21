@@ -48,7 +48,7 @@ export interface SummaryInputs {
      * user's session H160. When present, the summary surfaces it so the
      * user knows the app will still appear in their MyApps view.
      */
-    claimedOwnerH160?: string | null;
+    userSessionH160?: string | null;
 }
 
 export interface SummaryView {
@@ -98,15 +98,17 @@ export function buildSummaryView(input: SummaryInputs): SummaryView {
             value: input.moddable ? `yes — ${input.repositoryUrl}` : "no",
         });
         rows.push({ label: "Tag", value: input.tag ? input.tag : "none" });
-        if (input.claimedOwnerH160) {
-            // Dev mode + session: Alice signs the registry tx but the
-            // user's H160 is recorded as owner. Surfacing it here is
-            // what the spec promises: "Signing as Alice (dev). Your
-            // account will be recorded as the app owner so the app
-            // shows in MyApps."
+        // Registry #525 dropped `publish`'s owner argument: the CALLER is
+        // always recorded as owner, and no path can name another account. In
+        // dev mode that is the shared dev signer, NOT the logged-in user — so
+        // the app will not appear in their MyApps. This row used to promise the
+        // opposite ("your account (0x…)"), which is now false on-chain; verified
+        // against the deployed v2 registry, where a dev-mode publish recorded
+        // the dev H160. Say who will actually own it instead of hiding it.
+        if (input.mode === "dev" && input.userSessionH160) {
             rows.push({
                 label: "App owner",
-                value: `your account (${input.claimedOwnerH160})`,
+                value: "the dev signer — not your account (won't show in MyApps)",
             });
         }
     }

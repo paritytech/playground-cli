@@ -548,18 +548,7 @@ describe("publishToPlayground", () => {
                 expect.objectContaining({ __kind: "store" }),
                 bulletinStorageSigner,
             );
-            expect(publishTx).toHaveBeenCalledWith(
-                "my-app.paseo",
-                "bafymeta",
-                1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
-                "",
-                false,
-                false,
-            );
+            expect(publishTx).toHaveBeenCalledWith("my-app.paseo", "bafymeta", 1, "");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -621,27 +610,14 @@ describe("publishToPlayground", () => {
         }
     });
 
-    it("passes claimedOwnerH160 through as the dev-signer publish owner argument", async () => {
+    it("cannot name an owner — #525 made the caller the owner unconditionally", async () => {
         await publishToPlayground({
             domain: "claimed-app",
             publishSigner: fakeSigner,
             repositoryUrl: null,
             cwd: "/definitely/not/a/repo",
-            claimedOwnerH160: "0x1234567890abcdef1234567890abcdef12345678",
-            isDevSigner: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
-            "claimed-app.paseo",
-            "bafymeta",
-            1,
-            {
-                isSome: true,
-                value: "0x1234567890abcdef1234567890abcdef12345678",
-            },
-            "",
-            false,
-            true,
-        );
+        expect(publishTx).toHaveBeenCalledWith("claimed-app.paseo", "bafymeta", 1, "");
     });
 
     it("passes visibility=0 when isPrivate is true", async () => {
@@ -652,41 +628,17 @@ describe("publishToPlayground", () => {
             cwd: "/definitely/not/a/repo",
             isPrivate: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
-            "secret.paseo",
-            "bafymeta",
-            0,
-            {
-                isSome: false,
-                value: "0x0000000000000000000000000000000000000000",
-            },
-            "",
-            false,
-            false,
-        );
+        expect(publishTx).toHaveBeenCalledWith("secret.paseo", "bafymeta", 0, "");
     });
 
-    it("routes dev signer publishes through publish with is_dev_signer=true", async () => {
+    it("publishes with four args only — #525 dropped owner/is_moddable/is_dev_signer", async () => {
         await publishToPlayground({
             domain: "modded-by-dev",
             publishSigner: fakeSigner,
             repositoryUrl: "https://github.com/foo/bar",
             cwd: "/definitely/not/a/repo",
-            isModdable: true,
-            isDevSigner: true,
         });
-        expect(publishTx).toHaveBeenCalledWith(
-            "modded-by-dev.paseo",
-            "bafymeta",
-            1,
-            {
-                isSome: false,
-                value: "0x0000000000000000000000000000000000000000",
-            },
-            "",
-            true,
-            true,
-        );
+        expect(publishTx).toHaveBeenCalledWith("modded-by-dev.paseo", "bafymeta", 1, "");
     });
 
     it("forwards moddedFrom captured by `dot mod` in dot.json to registry.publish", async () => {
@@ -699,18 +651,7 @@ describe("publishToPlayground", () => {
                 repositoryUrl: null,
                 cwd: dir,
             });
-            expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.paseo",
-                "bafymeta",
-                1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
-                "original.paseo",
-                false,
-                false,
-            );
+            expect(publishTx).toHaveBeenCalledWith("my-mod.paseo", "bafymeta", 1, "original.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
@@ -741,13 +682,7 @@ describe("publishToPlayground", () => {
                 "my-mod.paseo",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
                 "steampunk-lizard-spock01.paseo",
-                false,
-                false,
             );
             // The explicit value must ALSO drive the metadata JSON, not just the
             // on-chain arg — otherwise the badge and the XP edge disagree.
@@ -775,13 +710,7 @@ describe("publishToPlayground", () => {
                 "my-mod.paseo",
                 "bafymeta",
                 1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
                 "steampunk-lizard-spock01.paseo",
-                false,
-                false,
             );
             expect(result.metadata.moddedFrom).toBe("steampunk-lizard-spock01.paseo");
         } finally {
@@ -800,18 +729,7 @@ describe("publishToPlayground", () => {
                 cwd: dir,
                 moddedFrom: "   ",
             });
-            expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.paseo",
-                "bafymeta",
-                1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
-                "original.paseo",
-                false,
-                false,
-            );
+            expect(publishTx).toHaveBeenCalledWith("my-mod.paseo", "bafymeta", 1, "original.paseo");
             expect(result.metadata.moddedFrom).toBe("original.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -832,18 +750,7 @@ describe("publishToPlayground", () => {
                 cwd: dir,
                 moddedFrom: "Not A Domain!",
             });
-            expect(publishTx).toHaveBeenCalledWith(
-                "my-mod.paseo",
-                "bafymeta",
-                1,
-                {
-                    isSome: false,
-                    value: "0x0000000000000000000000000000000000000000",
-                },
-                "original.paseo",
-                false,
-                false,
-            );
+            expect(publishTx).toHaveBeenCalledWith("my-mod.paseo", "bafymeta", 1, "original.paseo");
             expect(result.metadata.moddedFrom).toBe("original.paseo");
         } finally {
             rmSync(dir, { recursive: true, force: true });

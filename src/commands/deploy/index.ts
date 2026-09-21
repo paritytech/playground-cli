@@ -582,7 +582,7 @@ async function runHeadless(ctx: {
             (mode === "phone" || ctx.userSigner?.source === "dev"
                 ? ctx.userSigner?.address
                 : undefined),
-        claimedOwnerH160: setup.claimedOwnerH160,
+        userSessionH160: setup.userSessionH160,
     });
     process.stdout.write("\n" + renderSummaryText(view) + "\n");
 
