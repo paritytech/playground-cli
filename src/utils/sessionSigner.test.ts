@@ -18,7 +18,7 @@ import { ss58Encode } from "@parity/product-sdk-address";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import type { UserSession } from "@parity/product-sdk-terminal";
 import type { PolkadotSigner } from "polkadot-api";
-import { PLAYGROUND_PRODUCT_ID } from "../config.js";
+import { PLAYGROUND_PRODUCT_ID, getEnvTld } from "../config.js";
 import {
     INCOMPLETE_SESSION_MESSAGE,
     SESSION_EXPIRED_MESSAGE,
@@ -107,10 +107,16 @@ describe("createPlaygroundSessionSigner", () => {
         ).toThrow(INCOMPLETE_SESSION_MESSAGE);
     });
 
-    test("playground product id is pinned", () => {
-        // playground-app derives MyApps ownership from this exact id; a silent
-        // rename would orphan every published app.
-        expect(PLAYGROUND_PRODUCT_ID).toEqual("playground.dot");
+    test("playground product id follows the environment TLD", () => {
+        // playground-app derives MyApps ownership from this exact id, and the
+        // phone REJECTS an id whose TLD is not its own (android#123) — so the
+        // label is fixed but the suffix must track the env. Pinned against
+        // getEnvTld() rather than a literal so flipping ACTIVE_TESTNET_ENV
+        // cannot silently desync the CLI from the app.
+        expect(PLAYGROUND_PRODUCT_ID).toEqual(`playground.${getEnvTld()}`);
+        // Guard the shape too: a bare label or a doubled suffix would both
+        // still be "a string" but would derive a different account.
+        expect(PLAYGROUND_PRODUCT_ID).toMatch(/^playground\.[a-z0-9-]+$/);
     });
 });
 

@@ -430,8 +430,24 @@ describe("deriveSessionAddresses", () => {
         const addresses = deriveSessionAddresses(session);
 
         expect(addresses.rootAddress).toBe(TEST_ROOT_SS58);
-        expect(addresses.productAddress).toBe("5GGpUaN7XNaUp3nEVDPBSR4SQLxFxQsiPHbFwf69Apr3HgDZ");
-        expect(addresses.productH160).toBe("0x47f68a0851a663dfacb4610d673ec708f05576b0");
+        // Regenerated when PLAYGROUND_PRODUCT_ID moved from `playground.dot` to
+        // the env-suffixed `playground.paseo` (android#123 — the phone rejects a
+        // foreign TLD). Provenance, because a fixture regenerated from the code
+        // it checks is worthless: feeding the OLD id to the same primitives
+        // still reproduces the OLD pair below exactly, so ONLY the id changed —
+        // the derivation path is untouched. That path is independently pinned
+        // upstream against host-rust-core's cross-host vector
+        // (product-sdk `product-account.test.ts`).
+        //
+        //   playground.dot   -> 5GGpUaN7XNaUp3nEVDPBSR4SQLxFxQsiPHbFwf69Apr3HgDZ
+        //                       0x47f68a0851a663dfacb4610d673ec708f05576b0
+        //   playground.paseo -> the pair asserted below
+        //
+        // ⚠️ These are OLD-derivation values. When RFC-0022 (product-sdk #366)
+        // lands, the derivation itself changes and they must be re-verified
+        // against the app's boot banner, not just regenerated again.
+        expect(addresses.productAddress).toBe("5DoVmDX98xjw2XyHPpABgDuDJ2qFLGoTFwfzaiUEdW3a4M8e");
+        expect(addresses.productH160).toBe("0xb1ced7e7a64966ae0dc346eea7dcf66f823ccdca");
     });
 
     it("returns a product address distinct from the root — guards against double-derivation", () => {
