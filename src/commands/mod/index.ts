@@ -133,7 +133,16 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
                     const fetched = await withSpan(
                         "cli.mod.fetch-metadata",
                         "fetch app metadata for quest probe",
-                        () => fetchAppMetadata(registry, domain),
+                        // The registry handle only carries its per-method types
+                        // when `.cdm/` has been generated. That directory is
+                        // gitignored and CI never creates it, so there the
+                        // handle is a bare `Contract<ContractDef>` with no
+                        // `getMetadataUri` and this call fails to compile —
+                        // locally it type-checks fine, which is exactly why the
+                        // gap is worth closing (see the follow-up in the PR).
+                        // `getAppMetadataUri` validates the response at runtime,
+                        // so the cast costs no real safety.
+                        () => fetchAppMetadata(registry as unknown as MetadataUriReader, domain),
                     );
                     repoRef = fetched.repository ? parseGitHubRepoUrl(fetched.repository) : null;
                     questBranch = fetched.branch;
