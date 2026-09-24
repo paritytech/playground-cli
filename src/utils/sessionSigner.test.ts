@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, it, test, vi } from "vitest";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { deriveProductAccountPublicKey, seedToAccount } from "@parity/product-sdk-keys";
 import type { UserSession } from "@parity/product-sdk-terminal";
@@ -21,6 +21,7 @@ import type { PolkadotSigner } from "polkadot-api";
 import { PLAYGROUND_PRODUCT_ID, getEnvTld } from "../config.js";
 import {
     INCOMPLETE_SESSION_MESSAGE,
+    isAllowanceExpired,
     SESSION_EXPIRED_MESSAGE,
     createPlaygroundSessionSigner,
     derivePlaygroundProductPublicKey,
@@ -298,5 +299,76 @@ describe("wrapSignerWithSssFastFail", () => {
         await expect(wrapped.signTx(new Uint8Array(), {}, new Uint8Array(), 0)).rejects.toThrow(
             "user declined on phone",
         );
+    });
+});
+
+describe("expired statement-store allowance", () => {
+    /**
+     * The SDK changed shape under us. Up to 0.8.x an expired SSS allowance was
+     * logged to `console.error` and the signing promise never settled; since
+     * 0.10.0 `requestSignedTransaction` throws `AllowanceExpiredError`
+     * instead. The wrapper must turn BOTH into SESSION_EXPIRED_MESSAGE,
+     * because that message carries the only remedy — the renewal request would
+     * itself travel over the expired channel, so re-pairing is the only way
+     * out. A raw SDK error tells the user nothing they can act on.
+     */
+    // `signTx` takes 4-5 args in the real signature; the wrapper forwards them
+    // opaquely, so the test calls through a loose alias rather than building
+    // throwaway extrinsic arguments that nothing reads.
+    const callSignTx = (s: PolkadotSigner): Promise<Uint8Array> =>
+        (s.signTx as unknown as (...a: unknown[]) => Promise<Uint8Array>)({});
+
+    function fakeSigner(signTx: () => Promise<Uint8Array>): PolkadotSigner {
+        return {
+            publicKey: new Uint8Array(32).fill(1),
+            signTx,
+            signBytes: signTx,
+        } as unknown as PolkadotSigner;
+    }
+
+    it("maps a thrown AllowanceExpiredError to the re-pair message", async () => {
+        const err = new Error("statement store allowance expired");
+        err.name = "AllowanceExpiredError";
+        const signer = wrapSignerWithSssFastFail(
+            fakeSigner(async () => {
+                throw err;
+            }),
+        );
+
+        await expect(callSignTx(signer)).rejects.toThrow(SESSION_EXPIRED_MESSAGE);
+    });
+
+    it("keeps the original error as the cause, so the detail is not lost", async () => {
+        const err = new Error("statement store allowance expired");
+        err.name = "AllowanceExpiredError";
+        const signer = wrapSignerWithSssFastFail(
+            fakeSigner(async () => {
+                throw err;
+            }),
+        );
+
+        await callSignTx(signer).catch((caught: Error) => {
+            expect(caught.cause).toBe(err);
+        });
+    });
+
+    it("passes unrelated signing failures through untouched", async () => {
+        const signer = wrapSignerWithSssFastFail(
+            fakeSigner(async () => {
+                throw new Error("message too big");
+            }),
+        );
+
+        await expect(callSignTx(signer)).rejects.toThrow("message too big");
+    });
+
+    /** `instanceof` is unreliable across duplicate copies in a pnpm tree. */
+    it("recognises the error by name, not only by instanceof", () => {
+        const byName = new Error("nope");
+        byName.name = "AllowanceExpiredError";
+        expect(isAllowanceExpired(byName)).toBe(true);
+        expect(isAllowanceExpired(new Error("something else"))).toBe(false);
+        expect(isAllowanceExpired("not an error")).toBe(false);
+        expect(isAllowanceExpired(undefined)).toBe(false);
     });
 });

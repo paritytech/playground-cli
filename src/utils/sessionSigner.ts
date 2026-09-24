@@ -35,6 +35,7 @@
  */
 
 import {
+    AllowanceExpiredError,
     createSessionSignerForAccount,
     deriveProductPublicKey,
     type ProductAccountRef,
@@ -101,16 +102,38 @@ export const SESSION_EXPIRED_MESSAGE =
     'Run "playground logout" and then "playground login" to pair again.';
 
 /**
+ * Whether an error means the statement-store allowance has lapsed.
+ *
+ * Name-based as well as `instanceof`, deliberately: a pnpm tree can hold more
+ * than one copy of the SDK, and `instanceof` across copies silently returns
+ * false. Getting this wrong loses the actionable message, so it fails safe
+ * toward recognising the error.
+ */
+export function isAllowanceExpired(err: unknown): boolean {
+    if (err instanceof AllowanceExpiredError) return true;
+    if (!(err instanceof Error)) return false;
+    return (
+        err.name === "AllowanceExpiredError" || err.constructor?.name === "AllowanceExpiredError"
+    );
+}
+
+/**
  * Fast-fail for expired statement-store (SSS) allowances.
  *
  * Phone signing rides the statement store: `session.createTransaction` /
  * `session.signRaw` submit a statement on the People chain that the phone
  * subscribes to. The SSS allowance is a 1-day renewable resource (plus a
- * grace window, ~2-3 days total after login). When it lapses, the
- * statement-store adapter logs `NoAllowanceError` to `console.error` but
- * does NOT reject the promise — the signing call hangs for the SDK's 180s
- * queue timeout while the outer transaction watcher gives up at 90s with a
- * misleading "transaction watcher silent" error, times 3 retries.
+ * grace window, ~2-3 days total after login), and it cannot be renewed
+ * remotely, so the only remedy is re-pairing.
+ *
+ * There are TWO expiry shapes to catch, because the SDK changed:
+ *   - since product-sdk-terminal 0.10.0 it REJECTS with
+ *     `AllowanceExpiredError`, handled in the catch below;
+ *   - before that the statement-store adapter logged `NoAllowanceError` to
+ *     `console.error` and did NOT reject — the call hung for the SDK's 180s
+ *     queue timeout while the outer watcher gave up at 90s with a misleading
+ *     "transaction watcher silent" error, times 3 retries. The console
+ *     interception still covers that, and any path that still only logs.
  *
  * This wrapper intercepts `console.error` for the duration of each signing
  * call, detects the NoAllowanceError line, and rejects within ~200ms with an
@@ -160,6 +183,22 @@ export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigne
                         }, 200);
                     }),
                 ]);
+            } catch (err) {
+                // Since product-sdk-terminal 0.10.0 the SDK REJECTS with
+                // `AllowanceExpiredError` instead of logging `NoAllowanceError`
+                // and hanging, so the console interception above never fires on
+                // the primary expiry path. Without this branch the user gets a
+                // raw SDK error instead of the one message that states the only
+                // remedy (logout + login — the renewal request itself would
+                // travel over the expired channel).
+                //
+                // Matched by name as well as `instanceof`: duplicate copies of
+                // the package in a pnpm tree make `instanceof` unreliable, and
+                // failing open here would lose the remedy.
+                if (isAllowanceExpired(err)) {
+                    throw new Error(SESSION_EXPIRED_MESSAGE, { cause: err });
+                }
+                throw err;
             } finally {
                 // Both arms are settled or abandoned here: the interval must
                 // die (it would otherwise keep the event loop alive — see

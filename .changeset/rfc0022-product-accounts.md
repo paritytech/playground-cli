@@ -23,3 +23,10 @@ the session's root key locally.
 address stay owned by it; allowances and PGAS are re-granted at the next login.
 The new derivation is what current phones and the playground web app already
 use, so this brings the CLI back into agreement with them rather than away.
+
+Deploy also stops presenting a retry as progress. The phone-approval counter
+was counting signature *requests*, so a request that timed out and was re-sent
+appeared as the next step — and contradicted the "Phone approvals expected"
+plan, which counts operations. A deploy could print "step 2: Link content"
+while the plan said step 2 was the registry publish. Repeats are now labelled
+as retries, with the remedy worth checking when no prompt appeared at all.
