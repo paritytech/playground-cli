@@ -34,9 +34,9 @@
  * this CLI).
  */
 
-import { deriveProductAccountPublicKey } from "@parity/product-sdk-keys";
 import {
     createSessionSignerForAccount,
+    deriveProductPublicKey,
     type ProductAccountRef,
     type UserSession,
 } from "@parity/product-sdk-terminal";
@@ -57,34 +57,42 @@ export function sessionRootPublicKey(session: UserSession): Uint8Array {
 }
 
 /**
- * Soft-derive the product account public key off a wallet root.
+ * Derive the playground product account public key (RFC-0022).
  *
- * This is the single source of truth for product-account math in the CLI.
- * Both `createPlaygroundSessionSigner` (which feeds the key to the SDK
- * signer) and `auth.ts::deriveSessionAddresses` (which builds the display
- * triple for `playground login`) go through here so a future change to
- * derivation params can't silently desync the signer from what we print.
+ * It used to be three SOFT junctions (`product`/`playground.dot`/`0`) off
+ * `session.rootAccountId`, computed locally with no network. RFC-0022 makes
+ * `//product//{productId}` two HARD junctions, and a public key cannot cross a
+ * hard junction — so the parent must be the product SUBTREE key, which only
+ * the wallet can produce (`session.getProductSubtree`; consent-free, and the
+ * SDK caches it at `{appId}_ProductSubtrees.json`, reaching the phone only on
+ * a cold cache).
  *
- * sr25519 soft derivation is composable on public keys alone, so deriving
- * from `rootAccountId` locally produces the SAME public key the mobile
- * derives privately via `mnemonic + "/product/...{idx}"`. Algorithm
- * parity with mobile/desktop is locked by the frozen vectors in
- * `@parity/product-sdk-keys`'s `product-account.test.ts` and by the
- * `deriveSessionAddresses` block in `src/utils/auth.test.ts`.
+ * Three consequences worth knowing:
+ *   - it takes a SESSION, not a root public key;
+ *   - it is ASYNC, and on a cold cache it needs the phone reachable;
+ *   - the address differs from the pre-RFC-0022 one, so every product account
+ *     moved when this landed (see the migration note in CLAUDE.md).
+ *
+ * `deriveProductPublicKey` is the SDK's single source of truth for this math,
+ * so we delegate rather than re-derive. Cross-host agreement (CLI vs phone) is
+ * pinned at the primitive in `sessionSigner.test.ts` against host-rust-core's
+ * own vector — never against our own output.
  */
-export function derivePlaygroundProductPublicKey(
-    rootAccountId: Uint8Array,
-    ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): Uint8Array {
-    return deriveProductAccountPublicKey(rootAccountId, ref.productId, ref.derivationIndex);
-}
-
-export function createPlaygroundSessionSigner(
+export async function derivePlaygroundProductPublicKey(
     session: UserSession,
     ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): PolkadotSigner {
-    const publicKey = derivePlaygroundProductPublicKey(sessionRootPublicKey(session), ref);
-    return wrapSignerWithSssFastFail(createSessionSignerForAccount(session, { ...ref, publicKey }));
+): Promise<Uint8Array> {
+    return deriveProductPublicKey(session, ref);
+}
+
+export async function createPlaygroundSessionSigner(
+    session: UserSession,
+    ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
+): Promise<PolkadotSigner> {
+    // `publicKey` omitted on purpose: the SDK fetches the subtree and derives
+    // it through the same cached path as the display address, so the signer and
+    // what we print cannot desync.
+    return wrapSignerWithSssFastFail(await createSessionSignerForAccount(session, ref));
 }
 
 export const SESSION_EXPIRED_MESSAGE =

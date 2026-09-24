@@ -20,7 +20,7 @@
  * verify the patterns used rather than the full integration.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,6 +35,32 @@ import {
 import type { UserSession } from "@parity/product-sdk-terminal";
 import { DAPP_ID } from "../config.js";
 import { INCOMPLETE_SESSION_MESSAGE } from "./sessionSigner.js";
+
+/**
+ * host-rust-core cross-host vector (tests/wasm_crypto_vectors.rs,
+ * `product_account_and_entropy_vectors_match_mobile`) — the product account at
+ * index 0. Mirrored upstream in product-sdk's `product-account.test.ts`, and
+ * pinned directly in sessionSigner.test.ts. Used here so the SS58/H160 below
+ * descend from a value the MOBILE computes, not from our own output.
+ */
+const HOST_VECTOR_ACCOUNT = Uint8Array.from(
+    "1c1ae478b564572f806ffa6352b4273d612beb01610b19f4e5bf444521cd5b5c"
+        .match(/.{2}/g)!
+        .map((b) => Number.parseInt(b, 16)),
+);
+
+const { deriveProductPublicKeyMock } = vi.hoisted(() => ({
+    deriveProductPublicKeyMock: vi.fn(),
+}));
+
+// RFC-0022: the product account descends from a subtree key only the wallet
+// can produce. The SDK fetches it over the statement store and caches it on
+// disk under the default storage dir, so an unmocked call would hang waiting
+// for a phone and write a bogus key into the real ~/.polkadot-apps cache.
+vi.mock("@parity/product-sdk-terminal", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@parity/product-sdk-terminal")>();
+    return { ...actual, deriveProductPublicKey: deriveProductPublicKeyMock };
+});
 
 describe("subscribe-before-assignment pattern", () => {
     /**
@@ -418,6 +444,10 @@ describe("deriveSessionAddresses", () => {
         0x20, 0x7a,
     ]);
 
+    beforeEach(() => {
+        deriveProductPublicKeyMock.mockResolvedValue(HOST_VECTOR_ACCOUNT);
+    });
+
     function fakeSession(rootBytes: Uint8Array): UserSession {
         // `deriveSessionAddresses` only reads `session.rootAccountId`.
         // The full UserSession type carries signer callbacks we don't
@@ -425,9 +455,9 @@ describe("deriveSessionAddresses", () => {
         return { rootAccountId: rootBytes } as unknown as UserSession;
     }
 
-    it("matches the playground-app's published product address + H160 for a known root", () => {
+    it("matches the playground-app's published product address + H160 for a known root", async () => {
         const session = fakeSession(TEST_ROOT_BYTES);
-        const addresses = deriveSessionAddresses(session);
+        const addresses = await deriveSessionAddresses(session);
 
         expect(addresses.rootAddress).toBe(TEST_ROOT_SS58);
         // Regenerated when PLAYGROUND_PRODUCT_ID moved from `playground.dot` to
@@ -446,13 +476,13 @@ describe("deriveSessionAddresses", () => {
         // ⚠️ These are OLD-derivation values. When RFC-0022 (product-sdk #366)
         // lands, the derivation itself changes and they must be re-verified
         // against the app's boot banner, not just regenerated again.
-        expect(addresses.productAddress).toBe("5DoVmDX98xjw2XyHPpABgDuDJ2qFLGoTFwfzaiUEdW3a4M8e");
-        expect(addresses.productH160).toBe("0xb1ced7e7a64966ae0dc346eea7dcf66f823ccdca");
+        expect(addresses.productAddress).toBe("5ChZBnBw9eDQUMBhnXUKrGMdK5MTfGrca3T1xZZtBQhW8eis");
+        expect(addresses.productH160).toBe("0x47ab1defff8b02d4345d98896a064cd0e6800309");
     });
 
-    it("returns a product address distinct from the root — guards against double-derivation", () => {
+    it("returns a product address distinct from the root — guards against double-derivation", async () => {
         const session = fakeSession(TEST_ROOT_BYTES);
-        const addresses = deriveSessionAddresses(session);
+        const addresses = await deriveSessionAddresses(session);
 
         // If someone ever re-introduces a productAccountDisplay-style
         // helper that takes addresses.productAddress as input and runs
@@ -464,22 +494,29 @@ describe("deriveSessionAddresses", () => {
         expect(addresses.productAddress).not.toBe(addresses.rootAddress);
     });
 
-    it("derives the H160 from the same pubkey as the product SS58", () => {
-        // Two different rootAccountIds → different product SS58s → and
-        // the H160 must change in lock-step with the SS58. A regression
-        // that derived H160 off the root (or off a doubly-derived
-        // pubkey) would either keep the H160 constant when the root
-        // moves or break the ss58↔h160 pairing.
-        const a = deriveSessionAddresses(fakeSession(TEST_ROOT_BYTES));
-        const b = deriveSessionAddresses(fakeSession(ALT_ROOT_BYTES));
+    it("derives the H160 from the same pubkey as the product SS58", async () => {
+        // The H160 must move in lock-step with the product SS58. A regression
+        // that derived the H160 off the ROOT (or off a doubly-derived pubkey)
+        // would either hold the H160 constant while the product account moved,
+        // or break the ss58 <-> h160 pairing.
+        //
+        // Since RFC-0022 the product account descends from the wallet's
+        // SUBTREE key, not from `rootAccountId`, so varying the root proves
+        // nothing here — we vary what actually drives the derivation.
+        deriveProductPublicKeyMock.mockResolvedValueOnce(HOST_VECTOR_ACCOUNT);
+        const a = await deriveSessionAddresses(fakeSession(TEST_ROOT_BYTES));
+        deriveProductPublicKeyMock.mockResolvedValueOnce(ALT_ROOT_BYTES);
+        const b = await deriveSessionAddresses(fakeSession(TEST_ROOT_BYTES));
 
         expect(a.productAddress).not.toBe(b.productAddress);
         expect(a.productH160).not.toBe(b.productH160);
         expect(b.productH160).toMatch(/^0x[0-9a-f]{40}$/);
     });
 
-    it("reports stale sessions without a root account public key", () => {
-        expect(() => deriveSessionAddresses(fakeSession(new Uint8Array()))).toThrow(
+    it("reports stale sessions without a root account public key", async () => {
+        // Now async (RFC-0022 fetches the subtree), so the guard surfaces as a
+        // rejection rather than a synchronous throw.
+        await expect(deriveSessionAddresses(fakeSession(new Uint8Array()))).rejects.toThrow(
             INCOMPLETE_SESSION_MESSAGE,
         );
     });

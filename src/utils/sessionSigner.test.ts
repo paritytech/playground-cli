@@ -15,7 +15,7 @@
 
 import { describe, expect, test, vi } from "vitest";
 import { ss58Encode } from "@parity/product-sdk-address";
-import { seedToAccount } from "@parity/product-sdk-keys";
+import { deriveProductAccountPublicKey, seedToAccount } from "@parity/product-sdk-keys";
 import type { UserSession } from "@parity/product-sdk-terminal";
 import type { PolkadotSigner } from "polkadot-api";
 import { PLAYGROUND_PRODUCT_ID, getEnvTld } from "../config.js";
@@ -27,7 +27,52 @@ import {
     wrapSignerWithSssFastFail,
 } from "./sessionSigner.js";
 
+const { deriveProductPublicKeyMock, createSessionSignerForAccountMock } = vi.hoisted(() => ({
+    deriveProductPublicKeyMock: vi.fn(),
+    createSessionSignerForAccountMock: vi.fn(),
+}));
+
+// RFC-0022 derives the product account from a subtree key only the WALLET can
+// produce. The SDK fetches it over the statement store and caches it on disk
+// under the default storage dir — so an unmocked call here would hang waiting
+// for a phone AND write a bogus key into the developer's real
+// ~/.polkadot-apps subtree cache, breaking their live session. We mock the SDK
+// boundary and assert what WE control (which productId/index we ask for); the
+// derivation math itself is pinned below against host-rust-core's vector.
+vi.mock("@parity/product-sdk-terminal", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@parity/product-sdk-terminal")>();
+    return {
+        ...actual,
+        deriveProductPublicKey: deriveProductPublicKeyMock,
+        createSessionSignerForAccount: createSessionSignerForAccountMock,
+    };
+});
+
 const DEV_PHRASE = "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
+
+/**
+ * host-rust-core cross-host vector (tests/wasm_crypto_vectors.rs,
+ * `product_account_and_entropy_vectors_match_mobile`): the product SUBTREE
+ * public key for `//product//myapp.dot` off entropy 0xab x 16, and the account
+ * it yields at index 0. Copied from the host's own fixtures — never
+ * regenerated from our output.
+ */
+const HOST_VECTOR_SUBTREE = hexToBytes(
+    "4a4c063de30994d4341f1effa157ded4e0b340b2e657f238bef3f930faba192b",
+);
+const HOST_VECTOR_ACCOUNT = hexToBytes(
+    "1c1ae478b564572f806ffa6352b4273d612beb01610b19f4e5bf444521cd5b5c",
+);
+
+function hexToBytes(hex: string): Uint8Array {
+    return Uint8Array.from(hex.match(/.{2}/g)!.map((b) => Number.parseInt(b, 16)));
+}
+
+function toHex(bytes: Uint8Array): string {
+    return `0x${Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")}`;
+}
 
 // Stand-in for the mobile's SSO handshake response. `rootAccountId` is
 // `deriveRootAccount()` on the mobile = the bare-mnemonic keypair pubkey.
@@ -58,53 +103,78 @@ describe("createPlaygroundSessionSigner", () => {
     // As long as all three pin the same `(rootPubKey, productId, 0)` triple they
     // yield byte-identical SS58 strings. This is the regression guard.
     // ────────────────────────────────────────────────────────────────────────
-    test("login signer address === deploy signer address === playground-app address", () => {
+    test("asks the SDK for the playground product id at index 0", async () => {
         const session = fakeSession({ rootAccountId: root.publicKey });
+        deriveProductPublicKeyMock.mockResolvedValue(HOST_VECTOR_ACCOUNT);
 
-        const cliSigner = createPlaygroundSessionSigner(session, {
+        const key = await derivePlaygroundProductPublicKey(session, {
             productId: PLAYGROUND_PRODUCT_ID,
             derivationIndex: 0,
         });
-        const cliAddress = ss58Encode(cliSigner.publicKey);
 
-        // What the deployed playground-app gets back from the mobile (mobile
-        // computes this exact derivation from the same mnemonic).
-        const mobileDerived = seedToAccount(DEV_PHRASE, `/product/${PLAYGROUND_PRODUCT_ID}/0`);
-        const playgroundAppAddress = ss58Encode(mobileDerived.publicKey);
-
-        expect(cliAddress).toEqual(playgroundAppAddress);
+        expect(deriveProductPublicKeyMock).toHaveBeenCalledWith(session, {
+            productId: PLAYGROUND_PRODUCT_ID,
+            derivationIndex: 0,
+        });
+        expect(key).toBe(HOST_VECTOR_ACCOUNT);
     });
 
-    test("signer.publicKey is the derived product account, not the wallet account", () => {
+    /**
+     * The signer must NOT be handed a pre-computed `publicKey`. Supplying one
+     * would let the signing key and the address we display drift apart if the
+     * two were ever derived by different paths; omitting it makes the SDK
+     * resolve both through the same cached subtree. The pre-RFC-0022 bug was
+     * the extreme version of this — the signer used
+     * `session.remoteAccount.accountId` (the WALLET account), so the chain saw
+     * a different `From` than the funded, allowance-granted product account.
+     */
+    test("builds the signer without pinning a publicKey, so it cannot desync", async () => {
         const session = fakeSession({
             rootAccountId: root.publicKey,
             remoteAccountId: new Uint8Array(32).fill(7),
         });
-        const signer = createPlaygroundSessionSigner(session, {
-            productId: PLAYGROUND_PRODUCT_ID,
-            derivationIndex: 0,
-        });
-        const expected = derivePlaygroundProductPublicKey(root.publicKey, {
+        createSessionSignerForAccountMock.mockResolvedValue({
+            publicKey: HOST_VECTOR_ACCOUNT,
+            signTx: async () => new Uint8Array(),
+            signBytes: async () => new Uint8Array(),
+        } as unknown as PolkadotSigner);
+
+        const signer = await createPlaygroundSessionSigner(session, {
             productId: PLAYGROUND_PRODUCT_ID,
             derivationIndex: 0,
         });
 
-        // The pre-fix bug set signer.publicKey from session.remoteAccount.accountId
-        // (the user's wallet account), not the product-derived account. The chain
-        // would see the wallet as From — different from the funded / allowance-
-        // granted product account. This guard ensures we never slip back.
-        expect(signer.publicKey).toEqual(expected);
+        const [passedSession, passedRef] = createSessionSignerForAccountMock.mock.calls[0];
+        expect(passedSession).toBe(session);
+        expect(passedRef).toEqual({ productId: PLAYGROUND_PRODUCT_ID, derivationIndex: 0 });
+        expect(passedRef).not.toHaveProperty("publicKey");
+        expect(signer.publicKey).toEqual(HOST_VECTOR_ACCOUNT);
         expect(ss58Encode(signer.publicKey)).not.toEqual(ss58Encode(new Uint8Array(32).fill(7)));
     });
 
-    test("throws the friendly message when rootAccountId is missing", () => {
-        const session = fakeSession({ rootAccountId: undefined });
-        expect(() =>
-            createPlaygroundSessionSigner(session, {
-                productId: PLAYGROUND_PRODUCT_ID,
-                derivationIndex: 0,
-            }),
-        ).toThrow(INCOMPLETE_SESSION_MESSAGE);
+    /**
+     * Cross-host agreement, pinned at the primitive rather than through our
+     * own composition — a fixture regenerated from the code it checks is
+     * worthless.
+     *
+     * Both values come from host-rust-core's `tests/wasm_crypto_vectors.rs`
+     * (`product_account_and_entropy_vectors_match_mobile`), mirrored upstream
+     * in product-sdk's `product-account.test.ts`. They are what the MOBILE
+     * computes, so if this fails the CLI and the phone would derive different
+     * accounts for the same person.
+     *
+     * Note the subtree is keyed by product id: it is `//product//{productId}`
+     * with HARD junctions, which is why a public key can no longer cross it
+     * and the wallet has to hand us the subtree.
+     */
+    test("derives the mobile-matched account from the host's cross-host vector", () => {
+        const account = deriveProductAccountPublicKey(HOST_VECTOR_SUBTREE, {
+            tag: "Index",
+            value: 0,
+        });
+        expect(toHex(account)).toBe(
+            "0x1c1ae478b564572f806ffa6352b4273d612beb01610b19f4e5bf444521cd5b5c",
+        );
     });
 
     test("playground product id follows the environment TLD", () => {

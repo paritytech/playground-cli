@@ -40,8 +40,7 @@ export interface ResolvedSigner {
     /**
      * The session's root / product / H160 triple. Present for QR/mobile
      * sessions (forwarded from `SessionHandle`); absent for local dev/SURI
-     * signers. Consumed by `resolveSignerSetup` to pick the `userSessionH160`
-     * used for the deploy summary's dev-ownership warning
+     * signers. Consumed by `resolveSignerSetup` to pick the `claimedOwnerH160`
      * for dev-mode playground publish.
      */
     addresses?: SessionAddresses;

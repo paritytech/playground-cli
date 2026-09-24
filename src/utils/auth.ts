@@ -144,7 +144,7 @@ function newestSession(sessions: UserSession[]): UserSession {
     return sessions[sessions.length - 1];
 }
 
-function createPlaygroundSigner(session: UserSession): PolkadotSigner {
+async function createPlaygroundSigner(session: UserSession): Promise<PolkadotSigner> {
     return createPlaygroundSessionSigner(session, {
         productId: PLAYGROUND_PRODUCT_ID,
         derivationIndex: 0,
@@ -167,9 +167,9 @@ function createPlaygroundSigner(session: UserSession): PolkadotSigner {
  *
  * @internal
  */
-export function deriveSessionAddresses(session: UserSession): SessionAddresses {
+export async function deriveSessionAddresses(session: UserSession): Promise<SessionAddresses> {
     const rootBytes = sessionRootPublicKey(session);
-    const productPubkey = derivePlaygroundProductPublicKey(rootBytes, {
+    const productPubkey = await derivePlaygroundProductPublicKey(session, {
         productId: PLAYGROUND_PRODUCT_ID,
         derivationIndex: 0,
     });
@@ -187,9 +187,9 @@ function sessionRemoteAddress(session: UserSession): string | null {
     return accountId.length === 32 ? ss58Encode(accountId) : null;
 }
 
-function sessionLogoutAddress(session: UserSession): string {
+async function sessionLogoutAddress(session: UserSession): Promise<string> {
     try {
-        return deriveSessionAddresses(session).productAddress;
+        return (await deriveSessionAddresses(session)).productAddress;
     } catch {
         return sessionRemoteAddress(session) ?? "(stored session)";
     }
@@ -238,7 +238,7 @@ export async function connect(): Promise<ConnectResult> {
     }
 
     if (sessions.length > 0) {
-        const addresses = deriveSessionAddresses(newestSession(sessions));
+        const addresses = await deriveSessionAddresses(newestSession(sessions));
         // The "existing" result carries plain address data only — the
         // adapter is not part of it, so this is the last place that can
         // release it. Leaking it keeps a statement-store WebSocket +
@@ -359,7 +359,7 @@ export async function waitForLogin(
         if (authenticated) {
             const sessions = await loadSessions(adapter, 3000);
             if (sessions.length > 0) {
-                const addresses = deriveSessionAddresses(newestSession(sessions));
+                const addresses = await deriveSessionAddresses(newestSession(sessions));
                 address = addresses.productAddress;
                 // Do NOT prune older sessions here by calling
                 // `adapter.sessions.disconnect`. It submits a `Disconnected`
@@ -458,8 +458,8 @@ export async function getSessionSigner(): Promise<SessionHandle | null> {
     }
 
     const session = newestSession(sessions);
-    const signer = createPlaygroundSigner(session);
-    const addresses = deriveSessionAddresses(session);
+    const signer = await createPlaygroundSigner(session);
+    const addresses = await deriveSessionAddresses(session);
 
     let destroyed = false;
     const destroy = () => {
@@ -528,7 +528,7 @@ export async function findSession(): Promise<LogoutHandle | null> {
         return null;
     }
     const session = newestSession(sessions);
-    const address = sessionLogoutAddress(session);
+    const address = await sessionLogoutAddress(session);
     return { adapter, address, session };
 }
 
