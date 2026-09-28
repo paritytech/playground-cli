@@ -90,7 +90,7 @@ describe("ensureSmartContractAllowance", () => {
         expect(requestResourceAllocationMock).toHaveBeenCalledWith(
             expect.anything(),
             expect.anything(),
-            [{ tag: "SmartContractAllowance", value: 0 }],
+            [{ tag: "SmartContractAllowance", value: { tag: "Index", value: 0 } }],
         );
     });
 

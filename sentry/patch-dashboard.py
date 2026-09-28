@@ -19,6 +19,10 @@ from the live dashboard before PUT, per the spec §15h.
 
 import json
 import subprocess
+
+# Keychain item holding the Sentry API token. `sentry-api-token` was the
+# original name and no longer exists on current machines.
+_KEYCHAIN_ITEM = "sentry-api-token-playground"
 import sys
 import urllib.error
 import urllib.request
@@ -31,7 +35,7 @@ SERVER_FIELDS_QUERY = {"widgetId", "onDemand", "isHidden", "linkedDashboards"}
 
 def get_token() -> str:
     return subprocess.check_output(
-        ["security", "find-generic-password", "-s", "sentry-api-token", "-w"]
+        ["security", "find-generic-password", "-s", _KEYCHAIN_ITEM, "-w"]
     ).decode().strip()
 
 

@@ -134,7 +134,7 @@ export async function checkIdentityGate(
 
     let productH160: `0x${string}`;
     try {
-        productH160 = deriveSessionAddresses(handle.session).productH160;
+        productH160 = (await deriveSessionAddresses(handle.session)).productH160;
     } catch (err) {
         return { status: "unverifiable", detail: describe(err) };
     } finally {

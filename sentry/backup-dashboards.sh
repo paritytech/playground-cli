@@ -6,7 +6,10 @@
 
 set -euo pipefail
 
-TOKEN=$(security find-generic-password -s sentry-api-token -w)
+# Keychain item is `sentry-api-token-playground`; `sentry-api-token` is the
+# historical name and is kept as a fallback for older machines.
+TOKEN=$(security find-generic-password -s sentry-api-token-playground -w 2>/dev/null \
+    || security find-generic-password -s sentry-api-token -w)
 BASE="https://de.sentry.io/api/0/organizations/paritytech"
 
 # Known dashboard IDs. Append new IDs after creating new dashboards.

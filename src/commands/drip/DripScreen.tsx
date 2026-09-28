@@ -90,7 +90,7 @@ export function DripScreen({ onDone }: { onDone: (outcome: DripOutcome) => void 
             // single source of the product address used across the CLI.
             let recipient: string | null;
             try {
-                recipient = deriveSessionAddresses(handle.session).productAddress;
+                recipient = (await deriveSessionAddresses(handle.session)).productAddress;
             } catch {
                 recipient = null;
             }
