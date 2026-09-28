@@ -103,7 +103,7 @@ describe("resolveSignerSetup — dev mode", () => {
         expect(result.publishSigner?.source).toBe("dev");
         // The user's H160 is claimed via the owner parameter so MyApps still
         // resolves their app even though Alice signed the tx.
-        expect(result.claimedOwnerH160).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        expect(result.userSessionH160).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         // Dev mode keeps polkadot-app-deploy on its built-in default mnemonic —
         // passed EXPLICITLY so the persisted phone session is never resolved.
         expect(result.bulletinDeployAuthOptions).toEqual({ mnemonic: DEFAULT_MNEMONIC });
@@ -120,7 +120,7 @@ describe("resolveSignerSetup — dev mode", () => {
         });
         expect(result.approvals).toEqual([]);
         expect(result.publishSigner?.source).toBe("dev");
-        expect(result.claimedOwnerH160).toBeNull();
+        expect(result.userSessionH160).toBeNull();
     });
 
     it("dev SURI signer is forwarded to DotNS auth AND used as the publish signer", () => {
@@ -134,7 +134,7 @@ describe("resolveSignerSetup — dev mode", () => {
         // the user's chosen address, recorded as caller by default.
         expect(result.approvals).toEqual([]);
         expect(result.publishSigner).toBe(user);
-        expect(result.claimedOwnerH160).toBeNull();
+        expect(result.userSessionH160).toBeNull();
         expect(result.bulletinDeployAuthOptions.signer).toBe(user.signer);
         expect(result.bulletinDeployAuthOptions.signerAddress).toBe("5DevSuri");
         // The injected signer wins inside polkadot-app-deploy; no mnemonic needed.

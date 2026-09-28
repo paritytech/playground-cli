@@ -26,22 +26,22 @@ minimumReleaseAgeExclude:
   # progress parser matches are unchanged; then confirmed live — a deploy that
   # previously reverted at startingPrice now completes storage + DotNS.
   # Drop once it ages past the min-age window.
-  - "bulletin-deploy@0.18.4"
+  - "bulletin-deploy@0.20.0"
   - "@parity/dotns-cli@0.8.0"
-  # The @novasamatech/* 0.8.11 family (pulled transitively by
-  # @parity/product-sdk-terminal@^0.6.2 → host-papp@^0.8.9, which resolves to the
-  # 0.8.11 line) publishes the stable tag the same day; the min-age gate would
+  # The @novasamatech/* 0.10.0 family (pulled transitively by
+  # @parity/product-sdk-terminal@^0.10.0 → host-papp 0.10.0, pinned EXACT)
+  # publishes the stable tag the same day; the min-age gate would
   # otherwise pin us to the older prerelease line. We opt these onto the stable
   # line explicitly — they come from the vetted triangle-js-sdks source.
   # host-papp pins statement-store exact, so the whole family must move together.
   # Drop these once the version naturally ages past the min-age window.
-  - "@novasamatech/host-papp@0.8.11"
-  - "@novasamatech/host-api@0.8.11"
-  - "@novasamatech/host-api-wrapper@0.8.11"
-  - "@novasamatech/statement-store@0.8.11"
-  - "@novasamatech/storage-adapter@0.8.11"
-  - "@novasamatech/scale@0.8.11"
-  - "@novasamatech/substrate-slot-sr25519-wasm@0.8.11"
+  - "@novasamatech/host-papp@0.10.0"
+  - "@novasamatech/host-api@0.10.0"
+  - "@novasamatech/host-api-wrapper@0.10.0"
+  - "@novasamatech/statement-store@0.10.0"
+  - "@novasamatech/storage-adapter@0.10.0"
+  - "@novasamatech/scale@0.10.0"
+  - "@novasamatech/substrate-slot-sr25519-wasm@0.10.0"
   - '@parity/cdm-builder@5.0.1'
   - '@parity/cdm-codegen@0.6.26'
   - '@parity/cdm-env@2.4.0'
@@ -54,7 +54,12 @@ minimumReleaseAgeExclude:
   - '@parity/product-sdk-local-storage@0.3.4'
   - '@parity/product-sdk-signer@0.12.1'
   - '@parity/product-sdk-tx@0.4.1'
-  - '@parity/product-sdk-terminal@0.7.1'
+  - '@parity/product-sdk-terminal@0.10.0'
+  - '@parity/product-sdk-host@0.22.0'
+  - '@parity/product-sdk-keys@0.4.0'
+  - '@parity/product-sdk-local-storage@0.3.12'
+  - '@parity/product-sdk-signer@0.15.0'
+  - '@parity/product-sdk-utils@0.2.0'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
@@ -75,5 +80,5 @@ overrides:
 patchedDependencies:
   # PATCH(playground-cli) — local-only fixes pending upstream. See CLAUDE.md
   # "Two local pnpm patches remain" for what each one does.
-  "@novasamatech/statement-store@0.8.11": "patches/@novasamatech__statement-store@0.8.11.patch"
+  "@novasamatech/statement-store@0.10.0": "patches/@novasamatech__statement-store@0.10.0.patch"
   "@novasamatech/sdk-statement@0.6.0": "patches/@novasamatech__sdk-statement@0.6.0.patch"

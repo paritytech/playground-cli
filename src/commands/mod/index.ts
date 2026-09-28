@@ -22,7 +22,6 @@ import { getEnvTld } from "../../config.js";
 import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { getConnection, destroyConnection } from "../../utils/connection.js";
 import { getReadOnlyRegistryContract } from "../../utils/registry.js";
-import type { IdentityRegistry } from "../../utils/identity/identityGate.js";
 import { enforceIdentityGate } from "../shared/gateOrNotice.js";
 import { AppBrowser, type AppEntry } from "./AppBrowser.js";
 import { SetupScreen } from "./SetupScreen.js";
@@ -30,6 +29,7 @@ import { QuestPicker } from "./QuestPicker.js";
 import { defaultRepoName } from "../../utils/git/repoName.js";
 import { runCliCommand } from "../../cli-runtime.js";
 import { parseGitHubRepoUrl, type GitHubRepoRef } from "../../utils/mod/source.js";
+import { getAppMetadataUri, type MetadataUriReader } from "../../utils/mod/metadataUri.js";
 import { fetchBulletinJson, getBulletinGateway } from "../../utils/bulletinGateway.js";
 import { editWithAgentStep } from "./nextSteps.js";
 import { shouldShowTutorialPrompt } from "./tutorialPromptHint.js";
@@ -63,13 +63,11 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
             getReadOnlyRegistryContract(client.raw.assetHub),
         );
 
-        // Builder-identity gate: modding is reserved for revealed builders who
-        // joined the competition. This also gates `playground init`, which
-        // delegates here. Reuse the registry we just resolved so the gate
-        // doesn't re-resolve it. Blocked is a soft outcome (yellow box, exit 0).
-        if (
-            await enforceIdentityGate(client.raw.assetHub, registry as unknown as IdentityRegistry)
-        ) {
+        // Builder-identity gate: modding is reserved for callers the wired
+        // personhood verifier accepts. This also gates `playground init`,
+        // which delegates here. Blocked is a soft outcome (yellow box, exit 0).
+        //
+        if (await enforceIdentityGate(client.raw.assetHub)) {
             process.exitCode = 0;
             return;
         }
@@ -135,7 +133,16 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
                     const fetched = await withSpan(
                         "cli.mod.fetch-metadata",
                         "fetch app metadata for quest probe",
-                        () => fetchAppMetadata(registry, domain),
+                        // The registry handle only carries its per-method types
+                        // when `.cdm/` has been generated. That directory is
+                        // gitignored and CI never creates it, so there the
+                        // handle is a bare `Contract<ContractDef>` with no
+                        // `getMetadataUri` and this call fails to compile —
+                        // locally it type-checks fine, which is exactly why the
+                        // gap is worth closing (see the follow-up in the PR).
+                        // `getAppMetadataUri` validates the response at runtime,
+                        // so the cast costs no real safety.
+                        () => fetchAppMetadata(registry as unknown as MetadataUriReader, domain),
                     );
                     repoRef = fetched.repository ? parseGitHubRepoUrl(fetched.repository) : null;
                     questBranch = fetched.branch;
@@ -227,14 +234,11 @@ async function resolveTargetDir(args: { domain: string }): Promise<string | null
     return fallback;
 }
 
-async function fetchAppMetadata(registry: any, domain: string): Promise<FetchedAppMetadata> {
-    const metaRes = await registry.getMetadataUri.query(domain);
-    if (!metaRes.success) {
-        throw new Error(
-            `Registry lookup for "${domain}" failed at dry-run (chain rejected the call)`,
-        );
-    }
-    const cid = metaRes.value.isSome ? metaRes.value.value : null;
+async function fetchAppMetadata(
+    registry: MetadataUriReader,
+    domain: string,
+): Promise<FetchedAppMetadata> {
+    const cid = await getAppMetadataUri(registry, domain);
     if (!cid) throw new Error(`App "${domain}" not found in registry`);
     return await fetchBulletinJson<FetchedAppMetadata>(cid, getBulletinGateway());
 }

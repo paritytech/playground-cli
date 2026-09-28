@@ -192,7 +192,7 @@ describe("runDeploy", () => {
         expect(createBulletinAuthContextMock).not.toHaveBeenCalled();
     });
 
-    it("dev mode with playground: ZERO planned approvals AND user H160 is claimed as owner", async () => {
+    it("dev mode with playground: ZERO planned approvals, and the dev signer owns the app", async () => {
         const { events, push } = collectEvents();
         const outcome = await runDeploy({
             projectDir: "/tmp/proj",
@@ -211,22 +211,26 @@ describe("runDeploy", () => {
         expect(outcome.metadataCid).toBe("bafymeta");
         expect(publishToPlaygroundMock).toHaveBeenCalledTimes(1);
 
-        // The headline contract: the user's session H160 is passed as
-        // claimedOwnerH160 so MyApps still resolves the app even though
-        // Alice signed the publish tx. Without this assertion the test
-        // would pass even if the user's H160 silently never reached the
-        // chain.
+        // Registry #525 removed `publish`'s owner argument, so the user's
+        // H160 must NOT be forwarded to the publish call any more — the dev
+        // signer is the owner and nothing can override that. Pinning its
+        // absence stops the old "claimed owner" plumbing being reintroduced
+        // as an argument the contract has no parameter for. (The deploy
+        // summary warns the user separately; see summary.test.ts.)
         const calls = publishToPlaygroundMock.mock.calls as unknown[][];
-        const publishCall = calls[0]?.[0] as { claimedOwnerH160?: string } | undefined;
-        expect(publishCall?.claimedOwnerH160).toBe("0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef");
+        const publishCall = calls[0]?.[0] as Record<string, unknown> | undefined;
+        expect(publishCall).toBeDefined();
+        expect(publishCall).not.toHaveProperty("userSessionH160");
 
         const plan = events.find((e) => e.kind === "plan");
         expect(plan?.kind).toBe("plan");
         if (plan?.kind === "plan") expect(plan.approvals).toHaveLength(0);
     });
 
-    it("threads isModdable + isDevSigner into publishToPlayground", async () => {
-        // Phone-mode publish: isDevSigner=false, isModdable=true.
+    it("threads the moddable repository URL into publishToPlayground", async () => {
+        // registry #525 dropped the `is_moddable` / `is_dev_signer` publish args.
+        // Moddability now travels ONLY as `metadata.repository`, which is what
+        // `playground mod` reads — so that is the thing worth pinning.
         const { push } = collectEvents();
         await runDeploy({
             projectDir: "/tmp/proj",
@@ -240,14 +244,13 @@ describe("runDeploy", () => {
             onEvent: push,
         });
         const phoneCall = (publishToPlaygroundMock.mock.calls as unknown[][])[0]?.[0] as
-            | { isModdable?: boolean; isDevSigner?: boolean }
+            | { repositoryUrl?: string | null }
             | undefined;
-        expect(phoneCall?.isModdable).toBe(true);
-        expect(phoneCall?.isDevSigner).toBe(false);
+        expect(phoneCall?.repositoryUrl).toBe("https://github.com/foo/bar");
 
         publishToPlaygroundMock.mockClear();
 
-        // Dev-mode publish (no session): isDevSigner=true, isModdable=false.
+        // Dev-mode publish (no session): no repository recorded.
         await runDeploy({
             projectDir: "/tmp/proj",
             buildDir: "/tmp/proj/dist",
@@ -259,10 +262,9 @@ describe("runDeploy", () => {
             onEvent: push,
         });
         const devCall = (publishToPlaygroundMock.mock.calls as unknown[][])[0]?.[0] as
-            | { isModdable?: boolean; isDevSigner?: boolean }
+            | { repositoryUrl?: string | null }
             | undefined;
-        expect(devCall?.isModdable).toBe(false);
-        expect(devCall?.isDevSigner).toBe(true);
+        expect(devCall?.repositoryUrl ?? null).toBeNull();
     });
 
     it("threads the chosen tag into publishToPlayground (and defaults to null)", async () => {

@@ -294,7 +294,6 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                 publishToPlayground({
                     domain: fullDomain,
                     publishSigner: wrappedPublishSigner,
-                    claimedOwnerH160: setup.claimedOwnerH160,
                     repositoryUrl: options.repositoryUrl ?? null,
                     tag: options.tag ?? null,
                     cwd: options.projectDir,
@@ -303,8 +302,6 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
                     onAllowancePrompt: allowancePrompt,
                     env: options.env,
                     isPrivate: options.playgroundPrivate,
-                    isModdable: options.moddable ?? false,
-                    isDevSigner: publishSigner.source === "dev",
                 }),
         );
         return pub.metadataCid;

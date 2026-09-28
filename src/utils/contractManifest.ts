@@ -25,6 +25,16 @@
 
 export const PLAYGROUND_REGISTRY_CONTRACT = "@w3s/playground-registry";
 
+/**
+ * Identity lives in its OWN contract since the registry split (registry #525).
+ * `getRootAccount` — the builder-identity gate's only read — used to be on the
+ * registry and is not there any more: calling it on the registry handle now
+ * reverts. The split is invisible to `tsc` wherever a call site narrows the
+ * handle to a local structural interface, so keep identity reads pointed at
+ * this name explicitly.
+ */
+export const PLAYGROUND_IDENTITY_CONTRACT = "@w3s/playground-identity";
+
 const REVIVE_TRACE_CALL_COMPAT_ERROR =
     "Incompatible runtime entry RuntimeCall(ReviveApi_trace_call)";
 

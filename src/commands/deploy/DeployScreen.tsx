@@ -876,7 +876,7 @@ function ConfirmStage({
                 : inputs.mode === "phone" || userSigner?.source === "dev"
                   ? userSigner?.address
                   : undefined,
-        claimedOwnerH160: "claimedOwnerH160" in setup ? setup.claimedOwnerH160 : undefined,
+        userSessionH160: "userSessionH160" in setup ? setup.userSessionH160 : undefined,
     });
 
     useInput((_input, key) => {
