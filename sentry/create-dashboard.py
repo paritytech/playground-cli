@@ -10,6 +10,10 @@ Prints the new dashboard ID on success.
 
 import json
 import subprocess
+
+# Keychain item holding the Sentry API token. `sentry-api-token` was the
+# original name and no longer exists on current machines.
+_KEYCHAIN_ITEM = "sentry-api-token-playground"
 import sys
 import urllib.error
 import urllib.request
@@ -21,7 +25,7 @@ def main() -> int:
         return 2
 
     token = subprocess.check_output(
-        ["security", "find-generic-password", "-s", "sentry-api-token", "-w"]
+        ["security", "find-generic-password", "-s", _KEYCHAIN_ITEM, "-w"]
     ).decode().strip()
 
     with open(sys.argv[1]) as f:

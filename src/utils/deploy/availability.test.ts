@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ACTIVE_TESTNET_ENV, getEnvTld } from "../../config.js";
 
 // Mock polkadot-app-deploy's DotNS class. As of 0.7.6, label classification is
 // done by a top-level `classifyDotnsLabel` that the package doesn't re-export
@@ -41,6 +42,23 @@ vi.mock("bulletin-deploy", () => ({
             disconnect,
         };
     }),
+    // `availability.ts` resolves the env's DotNS options through upstream's own
+    // `resolveEndpoints` and passes them to `connect()`. Without them DotNS
+    // falls back to defaults whose POP_RULES has no code on this network. The
+    // doc is opaque to us here — `resolveEndpoints` is what reads it — so the
+    // mock returns the resolved shape directly, keyed by the env id the code
+    // asks for rather than a hardcoded one (so flipping ACTIVE_TESTNET_ENV does
+    // not silently make the resolution return nothing).
+    loadEnvironments: vi.fn(async () => ({ doc: {} })),
+    resolveEndpoints: vi.fn((_doc: unknown, envId: string) => ({
+        envName: envId,
+        network: "testnet",
+        tld: "paseo",
+        autoAccountMapping: true,
+        nativeToEthRatio: 1n,
+        registerStorageDeposit: 0n,
+        contracts: { POP_RULES: "0x747B456bE03aec0b42bd85C51513730FBD45DA31" },
+    })),
 }));
 
 // A realistic dev SS58 → H160 pair so the tests exercise the real derivation.
@@ -72,6 +90,32 @@ beforeEach(() => {
 });
 
 describe("checkDomainAvailability", () => {
+    // Regression guard for the "No contract deployed at this address" outage:
+    // this preflight used to call connect() with only `rpc`, so DotNS fell back
+    // to a built-in default contract map whose POP_RULES has no code on this
+    // network and 0.16+'s ABI-profile probe failed. Without this assertion the
+    // whole fix can be deleted with every other test still green.
+    it("connects with the env-resolved DotNS options, not just an RPC", async () => {
+        await checkDomainAvailability(NO_STATUS_LABEL);
+        expect(connect).toHaveBeenCalledWith(
+            expect.objectContaining({
+                rpc: expect.any(String),
+                environmentId: ACTIVE_TESTNET_ENV,
+                contracts: expect.objectContaining({
+                    POP_RULES: expect.stringMatching(/^0x[0-9a-fA-F]{40}$/),
+                }),
+                // Omitting these silently changes behaviour rather than
+                // erroring: a wrong `tld` makes checkOwnership query a
+                // different domain than we report, and a missing
+                // `autoAccountMapping` takes the manual branch that can submit
+                // a map_account extrinsic from this read-only path.
+                tld: getEnvTld(),
+                autoAccountMapping: true,
+                network: "testnet",
+            }),
+        );
+    });
+
     it("returns 'available' when classification is NoStatus", async () => {
         const result = await checkDomainAvailability(NO_STATUS_LABEL);
         // No ownerSs58Address passed → we can't check user's current PoP, so

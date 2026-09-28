@@ -33,17 +33,17 @@
  *     DotNS, `storageSigner` for chunks, and the dev publish signer below.
  *     Playground publish is ALSO signed by the dev
  *     account — Alice's H160 is recorded as `publisher`, but the contract
- *     accepts an optional `owner` parameter so we can record the user's
- *     H160 as the `owner` (the H160 MyApps queries with). When a phone
- *     session is present we pass `claimedOwnerH160 = session.productH160`
- *     so the user still sees the app in MyApps without ever tapping the
- *     phone. With no session, `claimedOwnerH160 = null` and the contract
- *     falls back to caller (dev account owns the app).
+ *     records the CALLER as owner — the dev account. ⚠️ Registry #525
+ *     dropped `publish`'s `owner` argument entirely, so a dev-mode deploy
+ *     can NO LONGER record the logged-in user as owner: their app will not
+ *     appear in MyApps. `userSessionH160` below is retained only to drive
+ *     the deploy summary's warning; nothing passes it on-chain any more.
+ *     The sudo-only `importApp` is the only owner-naming path that remains.
  *   - Phone mode: polkadot-app-deploy uses the user's phone signer for DotNS
  *     (3 taps). Storage uses the BulletInAllowance slot key resolved by
  *     `resolveStorageSignerOptions` — NEVER the phone signer (see that
  *     function's doc for why). Playground publish uses the user's phone
- *     signer (1 more tap). `claimedOwnerH160 = null` — the contract
+ *     signer (1 more tap). `userSessionH160 = null` — the caller
  *     defaults to caller, which is the user's H160 anyway.
  */
 
@@ -137,8 +137,9 @@ export interface DeploySignerSetup {
      * Signer used to call the registry publish method for the playground step.
      *
      * - Phone mode: the user's session signer — caller becomes owner.
-     * - Dev mode: the dev signer (Alice or `--suri`) — caller becomes
-     *   publisher, and `claimedOwnerH160` (when set) becomes owner.
+     * - Dev mode: the dev signer (Alice or `--suri`) — caller becomes BOTH
+     *   publisher and owner since registry #525; the user's H160 cannot be
+     *   substituted any more.
      *
      * `null` means we cannot publish (no signer at all — only valid when
      * `publishToPlayground === false`).
@@ -146,14 +147,16 @@ export interface DeploySignerSetup {
     publishSigner: ResolvedSigner | null;
 
     /**
-     * The H160 to pass as the `owner` argument of the registry publish method.
-     * Non-null only in dev mode WITH an active phone session — the dev
-     * account signs the tx but the user's H160 is recorded as owner so the
-     * app shows in their MyApps view. `null` ⇒ contract defaults to
-     * `env::caller()` (the signer's H160), which is correct for phone mode
-     * and for pure dev mode (no session).
+     * The logged-in user's H160, when dev mode runs with an active phone
+     * session.
+     *
+     * ⚠️ NO LONGER SENT ON-CHAIN. Registry #525 removed `publish`'s `owner`
+     * argument, so this can no longer make the user the owner — the dev
+     * signer is. It survives only so the deploy summary can WARN that the
+     * app won't show in the user's MyApps. Do not reintroduce it as a
+     * publish argument; the contract has no parameter for it.
      */
-    claimedOwnerH160: `0x${string}` | null;
+    userSessionH160: `0x${string}` | null;
 
     /**
      * Count of phone approvals the user should expect under this setup,
@@ -259,13 +262,13 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
     // Dev mode: we ALWAYS sign with a dev key, never with the session.
     //   - With `--suri`: that SURI dev signer (its address becomes owner).
     //   - With a session (user did `dot login`): construct Alice and pass
-    //     the session's product H160 as `claimedOwnerH160` — the contract
+    //     the session's product H160 as `userSessionH160` — used ONLY for
     //     records the user as owner so MyApps resolves their app.
-    //   - With neither: construct Alice and leave claimedOwnerH160 null
+    //   - With neither: construct Alice and leave userSessionH160 null
     //     (Alice owns the entry — pure-dev throwaway).
     // No phone approval is ever added in dev mode.
     let publishSigner: ResolvedSigner | null = null;
-    let claimedOwnerH160: `0x${string}` | null = null;
+    let userSessionH160: `0x${string}` | null = null;
     if (opts.publishToPlayground) {
         if (opts.mode === "phone") {
             publishSigner = opts.userSigner!;
@@ -280,12 +283,12 @@ export function resolveSignerSetup(opts: ResolveOptions): DeploySignerSetup {
             // tx phases sign as the same on-chain identity.
             publishSigner = createDevPublishSigner();
             if (opts.userSigner?.source === "session") {
-                claimedOwnerH160 = opts.userSigner.addresses?.productH160 ?? null;
+                userSessionH160 = opts.userSigner.addresses?.productH160 ?? null;
             }
         }
     }
 
-    return { bulletinDeployAuthOptions, publishSigner, claimedOwnerH160, approvals };
+    return { bulletinDeployAuthOptions, publishSigner, userSessionH160, approvals };
 }
 
 /**

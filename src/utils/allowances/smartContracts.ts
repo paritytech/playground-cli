@@ -23,7 +23,9 @@ import { productScopedAdapter } from "./resources.js";
 
 const SMART_CONTRACT_ALLOWANCE: AllocatableResource = {
     tag: "SmartContractAllowance",
-    value: 0,
+    // Tagged destination, not a bare number — see PLAYGROUND_RESOURCES in
+    // resources.ts for what an untagged value breaks in the SDK's cache.
+    value: { tag: "Index", value: 0 },
 };
 
 export interface SmartContractAllowanceOptions {

@@ -145,7 +145,7 @@ export interface RunDecentralizeOptions {
      * — git origin exists, public, GitHub) before passing it in; the runner
      * just threads it through. Only meaningful for `path` sources — mirrored
      * URL sites have no git source, so URL-mode callers always pass
-     * null/omit, and `isModdable` stays false.
+     * null/omit, and the app records no repository (not moddable).
      */
     repositoryUrl?: string | null;
     env: Env;
@@ -198,7 +198,7 @@ export async function runDecentralize(
     // signs with a dev key (polkadot-app-deploy default mnemonic or `--suri`).
     // This drives the "owned by a development account" callout — which speaks
     // to DotNS *domain* ownership (dev-signed in dev mode regardless of any
-    // registry-level `claimedOwnerH160`).
+    // registry-level owner override — #525 removed that capability).
     const storageSignerSource: ResolvedSigner["source"] = mode === "phone" ? "session" : "dev";
 
     // Shared counter across every phone tap (DotNS commitment/finalize/link,
@@ -320,7 +320,6 @@ export async function runDecentralize(
             const publishResult = await publishToPlayground({
                 domain: label,
                 publishSigner,
-                claimedOwnerH160: setup.claimedOwnerH160,
                 repositoryUrl,
                 tag: options.tag ?? null,
                 // Path sources have a real project root — its README.md (if
@@ -332,8 +331,6 @@ export async function runDecentralize(
                 cwd: source.kind === "path" ? findProjectRoot(source.directory) : undefined,
                 env,
                 isPrivate: false,
-                isModdable: repositoryUrl !== null,
-                isDevSigner: setup.publishSigner.source === "dev",
                 onLogEvent: (event) => onEvent?.({ kind: "playground-event", event }),
                 onAllowancePrompt: allowancePrompt,
             });
