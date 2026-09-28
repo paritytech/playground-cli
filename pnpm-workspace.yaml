@@ -26,7 +26,7 @@ minimumReleaseAgeExclude:
   # progress parser matches are unchanged; then confirmed live — a deploy that
   # previously reverted at startingPrice now completes storage + DotNS.
   # Drop once it ages past the min-age window.
-  - "bulletin-deploy@0.18.4"
+  - "bulletin-deploy@0.20.0"
   - "@parity/dotns-cli@0.8.0"
   # The @novasamatech/* 0.10.0 family (pulled transitively by
   # @parity/product-sdk-terminal@^0.10.0 → host-papp 0.10.0, pinned EXACT)

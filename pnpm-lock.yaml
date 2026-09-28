@@ -69,8 +69,8 @@ importers:
         specifier: ^9.47.1
         version: 9.47.1
       bulletin-deploy:
-        specifier: 0.18.4
-        version: 0.18.4(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+        specifier: 0.20.0
+        version: 0.20.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       commander:
         specifier: ^12.0.0
         version: 12.1.0
@@ -2379,8 +2379,8 @@ packages:
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
-  bulletin-deploy@0.18.4:
-    resolution: {integrity: sha512-I9bHoAv3ZmGg+JATldYvgKVqi+d76byrrk6dBX9u4OTeF2cFIYB/VOGHtpwrlHJQdMNc2dQaT+tbIZDIqPLmhg==}
+  bulletin-deploy@0.20.0:
+    resolution: {integrity: sha512-opk+ptQpCGsWqSepyaOieLjrphjeyrnyq9cuhRcLsi9vBvvzFL6p5Q4gNMRxRb7nznrxz2ZmERcOS29zlnrpkg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -7776,7 +7776,7 @@ snapshots:
 
   '@polkadot-labs/hdkd@0.0.28':
     dependencies:
-      '@polkadot-labs/hdkd-helpers': 0.0.30
+      '@polkadot-labs/hdkd-helpers': 0.0.31
 
   '@polkadot-labs/schnorrkel-wasm@0.0.9': {}
 
@@ -8730,7 +8730,7 @@ snapshots:
       base64-js: 1.5.1
       ieee754: 1.2.1
 
-  bulletin-deploy@0.18.4(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3):
+  bulletin-deploy@0.20.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/api@16.5.6)(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3):
     dependencies:
       '@ipld/car': 5.4.3
       '@ipld/dag-pb': 4.1.5
