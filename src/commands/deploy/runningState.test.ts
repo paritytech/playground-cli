@@ -168,7 +168,7 @@ describe("runningReducer — log/signing/plan events are no-ops", () => {
     it("signing sign-request -> state unchanged", () => {
         const s = runningReducer(s0, {
             kind: "signing",
-            event: { kind: "sign-request", step: 1, label: "DotNS register" },
+            event: { kind: "sign-request", step: 1, attempt: 1, label: "DotNS register" },
         });
         expect(s).toBe(s0);
     });

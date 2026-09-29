@@ -1223,6 +1223,7 @@ function RunningStage({
                         <PhoneApprovalCallout
                             step={signingPrompt.step}
                             label={signingPrompt.label}
+                            attempt={signingPrompt.attempt}
                         />
                     )}
                 </>

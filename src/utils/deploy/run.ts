@@ -34,6 +34,7 @@ import {
 } from "./signerMode.js";
 import {
     wrapSignerWithEvents,
+    wrapDotnsSigner,
     createSigningCounter,
     createApprovalPrompt,
     type SigningCounter,
@@ -326,15 +327,11 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
  * When polkadot-app-deploy is about to use the user's phone signer for DotNS, wrap
  * it so each `signTx` call surfaces a lifecycle event with the right label.
  *
- * Labels are pulled from the DotNS-phase entries of `setup.approvals`, in
- * order. `resolveSignerSetup` built that list to match polkadot-app-deploy's
- * actual on-chain call sequence (the DotNS commitment / register /
- * setContenthash steps), so `seen === N` → phone shows
- * the Nth entry. If polkadot-app-deploy ever fires *more* sigs than approvals
- * anticipated, we fall back to the last known label — better than emitting
- * a bogus index. The step counter itself is plan-independent (bare
- * sequential numbers, no predicted total), so extra or skipped sigs can't
- * desync the displayed count.
+ * Labels are the DotNS-phase entries of `setup.approvals`, in order —
+ * `resolveSignerSetup` built that list to match polkadot-app-deploy's actual
+ * on-chain call sequence. See `wrapDotnsSigner` for how retries keep their
+ * label. The step counter itself is plan-independent (bare sequential numbers,
+ * no predicted total), so extra or skipped sigs can't desync the displayed count.
  */
 function maybeWrapAuthForSigning(
     auth: ReturnType<typeof resolveSignerSetup>["bulletinDeployAuthOptions"],
@@ -345,31 +342,10 @@ function maybeWrapAuthForSigning(
     if (!auth.signer || !auth.signerAddress) return auth;
 
     const labels = approvals.filter((a) => a.phase === "dotns").map((a) => a.label);
-    const fallbackLabel = labels[labels.length - 1] ?? "DotNS step";
-    let seen = 0;
-    const wrapped = {
-        publicKey: auth.signer.publicKey,
-        signTx: (...args: Parameters<typeof auth.signer.signTx>) => {
-            const label = labels[seen] ?? fallbackLabel;
-            seen += 1;
-            const proxy = wrapSignerWithEvents(auth.signer!, {
-                label,
-                counter,
-                onEvent: (event) => options.onEvent({ kind: "signing", event }),
-            });
-            return proxy.signTx(...args);
-        },
-        signBytes: (...args: Parameters<typeof auth.signer.signBytes>) => {
-            const proxy = wrapSignerWithEvents(auth.signer!, {
-                label: "DotNS signBytes",
-                counter,
-                onEvent: (event) => options.onEvent({ kind: "signing", event }),
-            });
-            return proxy.signBytes(...args);
-        },
-    };
-
-    return { ...auth, signer: wrapped };
+    const signer = wrapDotnsSigner(auth.signer, labels, counter, (event) =>
+        options.onEvent({ kind: "signing", event }),
+    );
+    return { ...auth, signer };
 }
 
 function wrapResolvedSigner(

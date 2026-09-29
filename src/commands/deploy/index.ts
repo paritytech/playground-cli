@@ -58,6 +58,7 @@ import { normalizeDomain } from "../../utils/deploy/playground.js";
 import { assertBuildDirExists } from "../../utils/deploy/buildDir.js";
 import { PLAYGROUND_TAGS } from "../../utils/deploy/tags.js";
 import { NO_SESSION_HEADLESS_ERROR } from "./signerNotice.js";
+import { formatSignRequestLine } from "../../utils/ui/theme/phoneApprovalCopy.js";
 
 interface DeployOpts {
     suri?: string;
@@ -745,37 +746,6 @@ function runInteractive(ctx: {
 
 // ── Output helpers ───────────────────────────────────────────────────────────
 
-/**
- * Render a phone signature request, distinguishing a RETRY from progress.
- *
- * The `step` on the event counts signature REQUESTS, not operations: when a
- * request times out (the usual cause is the phone app not being in the
- * foreground, which shows no prompt at all) it is re-sent with the next number.
- * Printing that number made a stall look like progress — worse, it contradicted
- * the "Phone approvals expected" plan above it, which numbers OPERATIONS. Seen
- * live: `step 1: Link content` followed by `step 2: Link content`, while the
- * plan said step 2 would be the registry publish.
- *
- * So we key off the label instead and say plainly when we are re-sending, plus
- * the one remedy that actually fixes it.
- */
-const phoneSignAttempts = new Map<string, number>();
-
-export function formatSignRequest(label: string): string {
-    const attempt = (phoneSignAttempts.get(label) ?? 0) + 1;
-    phoneSignAttempts.set(label, attempt);
-    if (attempt === 1) return `  📱 Approve on your phone: ${label}\n`;
-    return (
-        `  📱 No response yet — re-sent to your phone (attempt ${attempt}): ${label}\n` +
-        `     If no prompt appeared, open the Polkadot app and keep it in the foreground.\n`
-    );
-}
-
-/** Test seam: the attempt counter is module state, so tests must reset it. */
-export function resetSignRequestAttempts(): void {
-    phoneSignAttempts.clear();
-}
-
 function logHeadlessEvent(event: DeployEvent) {
     if (event.kind === "phase-start") {
         process.stdout.write(`▸ ${event.phase}…\n`);
@@ -786,7 +756,7 @@ function logHeadlessEvent(event: DeployEvent) {
     } else if (event.kind === "storage-event" && event.event.kind === "chunk-progress") {
         process.stdout.write(`  chunk ${event.event.current}/${event.event.total}\n`);
     } else if (event.kind === "signing" && event.event.kind === "sign-request") {
-        process.stdout.write(formatSignRequest(event.event.label));
+        process.stdout.write(formatSignRequestLine(event.event));
     } else if (event.kind === "error") {
         process.stderr.write(`  ✖ ${event.phase}: ${event.message}\n`);
     }
@@ -818,7 +788,7 @@ function logHeadlessContractInstallEvent(event: ContractInstallEvent) {
 
 function logHeadlessSigningEvent(event: SigningEvent) {
     if (event.kind === "sign-request") {
-        process.stdout.write(`  approve on your phone (step ${event.step}): ${event.label}\n`);
+        process.stdout.write(formatSignRequestLine(event));
     }
 }
 

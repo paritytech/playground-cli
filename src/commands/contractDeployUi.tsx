@@ -209,6 +209,7 @@ export function ContractDeployStatusView({
                 <PhoneApprovalCallout
                     step={adapter.signingPrompt.step}
                     label={adapter.signingPrompt.label}
+                    attempt={adapter.signingPrompt.attempt}
                 />
             )}
             {adapter.signingError && (

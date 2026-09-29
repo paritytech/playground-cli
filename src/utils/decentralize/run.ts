@@ -44,6 +44,7 @@ import {
     createApprovalPrompt,
     type SigningCounter,
     type SigningEvent,
+    wrapDotnsSigner,
     wrapSignerWithEvents,
 } from "../deploy/signingProxy.js";
 import { runStorageDeploy } from "../deploy/storage.js";
@@ -375,25 +376,5 @@ function wrapAuthForSigning(
     if (!auth.signer || !auth.signerAddress) return auth;
 
     const labels = approvals.filter((a) => a.phase === "dotns").map((a) => a.label);
-    const fallbackLabel = labels[labels.length - 1] ?? "DotNS step";
-    const signer = auth.signer;
-    let seen = 0;
-
-    return {
-        ...auth,
-        signer: {
-            publicKey: signer.publicKey,
-            signTx: (...args: Parameters<typeof signer.signTx>) => {
-                const label = labels[seen] ?? fallbackLabel;
-                seen += 1;
-                return wrapSignerWithEvents(signer, { label, counter, onEvent }).signTx(...args);
-            },
-            signBytes: (...args: Parameters<typeof signer.signBytes>) =>
-                wrapSignerWithEvents(signer, {
-                    label: "DotNS signBytes",
-                    counter,
-                    onEvent,
-                }).signBytes(...args),
-        },
-    };
+    return { ...auth, signer: wrapDotnsSigner(auth.signer, labels, counter, onEvent) };
 }

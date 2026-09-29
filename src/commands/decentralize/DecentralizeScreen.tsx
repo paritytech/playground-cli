@@ -894,7 +894,11 @@ function RunningStage({
             </Section>
 
             {signingPrompt && signingPrompt.kind === "sign-request" && (
-                <PhoneApprovalCallout step={signingPrompt.step} label={signingPrompt.label} />
+                <PhoneApprovalCallout
+                    step={signingPrompt.step}
+                    label={signingPrompt.label}
+                    attempt={signingPrompt.attempt}
+                />
             )}
         </Box>
     );
