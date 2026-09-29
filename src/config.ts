@@ -279,10 +279,32 @@ export const DAPP_ID = "dot-cli";
  * `mnemonic + "/product/{PLAYGROUND_PRODUCT_ID}/0"`; changing this value
  * changes the on-chain account.
  */
-// NOTE: this id is TLD-independent by ecosystem convention — product ids stay
-// `<label>.dot` on every network; only DotNS registration/serving names use
-// the per-env TLD (see `getEnvTld`). Do NOT thread `getEnvTld` through here.
-export const PLAYGROUND_PRODUCT_ID = "playground.dot";
+// The product id FOLLOWS THE ENVIRONMENT TLD. It is not `<label>.dot` on every
+// network — an earlier note here claimed that "by ecosystem convention" and was
+// wrong; the phone is what decides, and it disagrees.
+//
+// Android validates the incoming product id against ITS OWN TLD before any
+// handler runs (`productIdPattern = ([a-z0-9-]+\.)+<tld>`,
+// `SsoSessionMessageMappers.kt:151`). A `.dot` id sent to a `paseo` phone fails
+// that check, the throw is swallowed, and `ProductSubtreeRequest` is never
+// answered — silent in both directions, surfacing only as a ~180 s hang and a
+// client that thinks nobody is signed in. Measured on one session:
+// `playground.paseo` → subtree in ~3 s; `playground.dot` → no reply.
+// See polkadot-android-community#123.
+//
+// playground-app already ships the same rule (`defaultDotNsId`, commit
+// `6e9337c`) and prints `product id : playground.paseo` at boot. These two
+// strings MUST match exactly: the derivation is
+// `mnemonic + "/product/{PLAYGROUND_PRODUCT_ID}/0"`, so the id IS the account.
+// If they diverge, the CLI and the app resolve different H160s for the same
+// human and app ownership, XP and dedupe split across two identities.
+//
+// ⚠️ Changing the TLD is an IDENTITY MIGRATION, not a constant edit: every
+// derived product account moves. Anything keyed on the old id — cached product
+// subtrees and the SDK allowance cache, both stored as
+// `~/.polkadot-apps/{productId}_*.json` — belongs to the old account and is
+// simply not found under the new one (re-granted on next login, not corrupted).
+export const PLAYGROUND_PRODUCT_ID = `playground.${getEnvTld()}`;
 
 /**
  * Host metadata carried inline in the V2 pairing proposal (host-papp 0.8+).

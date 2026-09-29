@@ -34,9 +34,10 @@
  * this CLI).
  */
 
-import { deriveProductAccountPublicKey } from "@parity/product-sdk-keys";
 import {
+    AllowanceExpiredError,
     createSessionSignerForAccount,
+    deriveProductPublicKey,
     type ProductAccountRef,
     type UserSession,
 } from "@parity/product-sdk-terminal";
@@ -57,34 +58,42 @@ export function sessionRootPublicKey(session: UserSession): Uint8Array {
 }
 
 /**
- * Soft-derive the product account public key off a wallet root.
+ * Derive the playground product account public key (RFC-0022).
  *
- * This is the single source of truth for product-account math in the CLI.
- * Both `createPlaygroundSessionSigner` (which feeds the key to the SDK
- * signer) and `auth.ts::deriveSessionAddresses` (which builds the display
- * triple for `playground login`) go through here so a future change to
- * derivation params can't silently desync the signer from what we print.
+ * It used to be three SOFT junctions (`product`/`playground.dot`/`0`) off
+ * `session.rootAccountId`, computed locally with no network. RFC-0022 makes
+ * `//product//{productId}` two HARD junctions, and a public key cannot cross a
+ * hard junction — so the parent must be the product SUBTREE key, which only
+ * the wallet can produce (`session.getProductSubtree`; consent-free, and the
+ * SDK caches it at `{appId}_ProductSubtrees.json`, reaching the phone only on
+ * a cold cache).
  *
- * sr25519 soft derivation is composable on public keys alone, so deriving
- * from `rootAccountId` locally produces the SAME public key the mobile
- * derives privately via `mnemonic + "/product/...{idx}"`. Algorithm
- * parity with mobile/desktop is locked by the frozen vectors in
- * `@parity/product-sdk-keys`'s `product-account.test.ts` and by the
- * `deriveSessionAddresses` block in `src/utils/auth.test.ts`.
+ * Three consequences worth knowing:
+ *   - it takes a SESSION, not a root public key;
+ *   - it is ASYNC, and on a cold cache it needs the phone reachable;
+ *   - the address differs from the pre-RFC-0022 one, so every product account
+ *     moved when this landed (see the migration note in CLAUDE.md).
+ *
+ * `deriveProductPublicKey` is the SDK's single source of truth for this math,
+ * so we delegate rather than re-derive. Cross-host agreement (CLI vs phone) is
+ * pinned at the primitive in `sessionSigner.test.ts` against host-rust-core's
+ * own vector — never against our own output.
  */
-export function derivePlaygroundProductPublicKey(
-    rootAccountId: Uint8Array,
-    ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): Uint8Array {
-    return deriveProductAccountPublicKey(rootAccountId, ref.productId, ref.derivationIndex);
-}
-
-export function createPlaygroundSessionSigner(
+export async function derivePlaygroundProductPublicKey(
     session: UserSession,
     ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): PolkadotSigner {
-    const publicKey = derivePlaygroundProductPublicKey(sessionRootPublicKey(session), ref);
-    return wrapSignerWithSssFastFail(createSessionSignerForAccount(session, { ...ref, publicKey }));
+): Promise<Uint8Array> {
+    return deriveProductPublicKey(session, ref);
+}
+
+export async function createPlaygroundSessionSigner(
+    session: UserSession,
+    ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
+): Promise<PolkadotSigner> {
+    // `publicKey` omitted on purpose: the SDK fetches the subtree and derives
+    // it through the same cached path as the display address, so the signer and
+    // what we print cannot desync.
+    return wrapSignerWithSssFastFail(await createSessionSignerForAccount(session, ref));
 }
 
 export const SESSION_EXPIRED_MESSAGE =
@@ -93,16 +102,38 @@ export const SESSION_EXPIRED_MESSAGE =
     'Run "playground logout" and then "playground login" to pair again.';
 
 /**
+ * Whether an error means the statement-store allowance has lapsed.
+ *
+ * Name-based as well as `instanceof`, deliberately: a pnpm tree can hold more
+ * than one copy of the SDK, and `instanceof` across copies silently returns
+ * false. Getting this wrong loses the actionable message, so it fails safe
+ * toward recognising the error.
+ */
+export function isAllowanceExpired(err: unknown): boolean {
+    if (err instanceof AllowanceExpiredError) return true;
+    if (!(err instanceof Error)) return false;
+    return (
+        err.name === "AllowanceExpiredError" || err.constructor?.name === "AllowanceExpiredError"
+    );
+}
+
+/**
  * Fast-fail for expired statement-store (SSS) allowances.
  *
  * Phone signing rides the statement store: `session.createTransaction` /
  * `session.signRaw` submit a statement on the People chain that the phone
  * subscribes to. The SSS allowance is a 1-day renewable resource (plus a
- * grace window, ~2-3 days total after login). When it lapses, the
- * statement-store adapter logs `NoAllowanceError` to `console.error` but
- * does NOT reject the promise — the signing call hangs for the SDK's 180s
- * queue timeout while the outer transaction watcher gives up at 90s with a
- * misleading "transaction watcher silent" error, times 3 retries.
+ * grace window, ~2-3 days total after login), and it cannot be renewed
+ * remotely, so the only remedy is re-pairing.
+ *
+ * There are TWO expiry shapes to catch, because the SDK changed:
+ *   - since product-sdk-terminal 0.10.0 it REJECTS with
+ *     `AllowanceExpiredError`, handled in the catch below;
+ *   - before that the statement-store adapter logged `NoAllowanceError` to
+ *     `console.error` and did NOT reject — the call hung for the SDK's 180s
+ *     queue timeout while the outer watcher gave up at 90s with a misleading
+ *     "transaction watcher silent" error, times 3 retries. The console
+ *     interception still covers that, and any path that still only logs.
  *
  * This wrapper intercepts `console.error` for the duration of each signing
  * call, detects the NoAllowanceError line, and rejects within ~200ms with an
@@ -152,6 +183,22 @@ export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigne
                         }, 200);
                     }),
                 ]);
+            } catch (err) {
+                // Since product-sdk-terminal 0.10.0 the SDK REJECTS with
+                // `AllowanceExpiredError` instead of logging `NoAllowanceError`
+                // and hanging, so the console interception above never fires on
+                // the primary expiry path. Without this branch the user gets a
+                // raw SDK error instead of the one message that states the only
+                // remedy (logout + login — the renewal request itself would
+                // travel over the expired channel).
+                //
+                // Matched by name as well as `instanceof`: duplicate copies of
+                // the package in a pnpm tree make `instanceof` unreliable, and
+                // failing open here would lose the remedy.
+                if (isAllowanceExpired(err)) {
+                    throw new Error(SESSION_EXPIRED_MESSAGE, { cause: err });
+                }
+                throw err;
             } finally {
                 // Both arms are settled or abandoned here: the interval must
                 // die (it would otherwise keep the event loop alive — see

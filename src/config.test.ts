@@ -24,10 +24,16 @@
  * moves an endpoint, or a typo in a hand-added block, fails CI.
  *
  * Scope: this checks the values WE duplicate (endpoints, network, gateway,
- * autoAccountMapping). It does NOT assert the DotNS contract-address map —
- * polkadot-app-deploy owns and resolves that internally by env id, so as long as
- * our `env` string matches a known upstream env, the contracts come from the same
- * source by construction.
+ * autoAccountMapping), AND that upstream still ships the DotNS contract-address
+ * map the availability preflight reads at runtime.
+ *
+ * That second part used to be out of scope, on the assumption that "polkadot-app-deploy
+ * owns and resolves the contracts internally by env id, so they come from the
+ * same source by construction". That was false for `availability.ts`, which
+ * constructed `DotNS` and connected WITHOUT the map — DotNS then merged nothing
+ * over its built-in defaults, whose `POP_RULES` has no code on paseo-next-v2,
+ * and the ABI-profile probe failed with "No contract deployed at this address".
+ * The map is now resolved explicitly, so its presence upstream is ours to guard.
  *
  * It also guards the single-line network switch: the default env's CDM
  * meta-registry address (owned by `@parity/cdm-env`, keyed by `cdmEnvName`) must
@@ -102,6 +108,30 @@ describe("config ↔ polkadot-app-deploy environments.json (divergence guard)", 
 
             it("bulletin gateway derives from upstream ipfs", () => {
                 expect(cfg.bulletinGateway).toBe(`${upstreamEnv(envId)?.ipfs}/ipfs/`);
+            });
+
+            // `availability.ts` reads these at RUNTIME and hands them to
+            // `DotNS.connect()`. Guard EVERY address the connect path
+            // dereferences, not just one: connect() does
+            // `{ ...DEFAULTS, ...options.contracts }`, so a key missing
+            // upstream silently falls back to a default address with no code on
+            // this network rather than erroring. Each has its own failure mode —
+            // POP_RULES: the pricing/deposit read that reverts outright;
+            // DOTNS_POP_CONTROLLER: the `isPopIssued` discriminator, whose
+            // absence makes the probe silently assume v0.5.8-rc1 label
+            // semantics; DOTNS_PROTOCOL_REGISTRY: the on-chain TLD read;
+            // DOTNS_REGISTRAR/DOTNS_REGISTRY: ownership lookups that would
+            // report the wrong owner.
+            it.each([
+                "POP_RULES",
+                "DOTNS_POP_CONTROLLER",
+                "DOTNS_PROTOCOL_REGISTRY",
+                "DOTNS_REGISTRAR",
+                "DOTNS_REGISTRY",
+            ])("upstream ships a %s address for the availability probe", (key) => {
+                const contracts = upstreamEnv(envId)?.contracts;
+                expect(contracts, `no contracts map for ${envId}`).toBeDefined();
+                expect(contracts?.[key], `no ${key} for ${envId}`).toMatch(/^0x[0-9a-fA-F]{40}$/);
             });
 
             it("faucet URL matches upstream popSelfServe.faucetUrl", () => {

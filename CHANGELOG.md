@@ -1,5 +1,132 @@
 # playground-cli
 
+## 0.48.0
+
+### Minor Changes
+
+- c2b18ad: Derive the product account from an environment-scoped product id
+  (`playground.paseo` on paseo-next-v2) instead of a fixed `playground.dot`.
+
+  This is an identity migration, not a cosmetic change: the product id is an
+  input to the account derivation, so **your product account address changes**.
+  Apps published from the CLI before this release are owned by the old address
+  and will no longer show as yours; anything keyed to the old product id (cached
+  subtrees, the SDK allowance cache under `~/.polkadot-apps/`) is simply not
+  found under the new one and is re-granted at your next `playground login`.
+
+  The change is required for the CLI to work at all against a phone on a
+  `paseo` environment. The mobile host validates the product id against its own
+  TLD and drops a mismatch silently, so a `.dot` id produced no prompt, no error
+  and no reply — only a ~180 second timeout. It also keeps the CLI and the
+  playground web app on one identity: the app already ships the
+  environment-suffixed form, and two different ids for the same person would
+  split app ownership and XP across two accounts.
+
+- f65f5dd: Fix QR pairing, and sign as the RFC-0022 product account.
+
+  `playground login` has been unable to pair with current phones since
+  mid-August: `@novasamatech/host-papp` 0.9.0 moved the pairing envelope from
+  P-256/AES-GCM to X25519/ChaCha20-Poly1305, shrinking the device key from 65 to
+  32 bytes. The handshake codec is fixed-width, so there was no graceful
+  degrade — iOS reported "Something went wrong" and Android "invalid QR code".
+  Moving to `@parity/product-sdk-terminal@0.10.0` (host-papp 0.10.0) puts the CLI
+  back on the wire both shipping apps speak.
+
+  The same release changes how the product account is derived. RFC-0022 places it
+  at `//product//{productId}/{index}`, where the two `//product//{productId}`
+  junctions are HARD — and a public key cannot cross a hard junction, so the
+  account is now derived from a subtree key the wallet provides rather than from
+  the session's root key locally.
+
+  **Your product account address changes, and you must pair again.** Run
+  `playground logout` and then `playground login`. Apps published from the old
+  address stay owned by it; allowances and PGAS are re-granted at the next login.
+  The new derivation is what current phones and the playground web app already
+  use, so this brings the CLI back into agreement with them rather than away.
+
+  Deploy also stops presenting a retry as progress. The phone-approval counter
+  was counting signature _requests_, so a request that timed out and was re-sent
+  appeared as the next step — and contradicted the "Phone approvals expected"
+  plan, which counts operations. A deploy could print "step 2: Link content"
+  while the plan said step 2 was the registry publish. Repeats are now labelled
+  as retries, with the remedy worth checking when no prompt appeared at all.
+
+- d859c74: Move to the v2 playground contracts (registry + identity + verifier).
+
+  `registry.publish` now takes four arguments (`domain`, `metadata_uri`,
+  `visibility`, `modded_from`) and has a new selector, so this release is
+  required to publish at all — the previous seven-argument form reverts against
+  the deployed contract. The dropped `owner` parameter changes who owns an app:
+  the registry now always records the caller, so a dev-mode deploy is owned by
+  the dev signer and will not appear in your MyApps. `playground deploy` says so
+  explicitly in its summary instead of implying otherwise.
+
+  Also fixes `playground mod` and `playground init`, which failed with
+  `App "<domain>" not found in registry` for every app, including ones that
+  demonstrably existed. The v2 registry returns `getMetadataUri` as a plain
+  string (empty when absent) rather than an `Option`, and the old
+  `value.isSome` narrowing read `undefined` every time. Decoding now lives in
+  one place and treats an unexpected payload as an error rather than silently
+  reporting "not found".
+
+### Patch Changes
+
+- 0a634ea: Update `bulletin-deploy` to 0.20.0.
+
+  Fixes two crashes that ended a deploy after the content was already uploaded.
+  One of them is a crash we hit in practice: `JSON.parse` on incoming RPC data was
+  unguarded and threw inside the socket handler, where nothing upstream could
+  catch it, killing the process mid-deploy. The other is `hasIPFS()` passing when
+  `ipfs` is installed but was never initialised.
+
+  Also brings, from 0.19.x: the storage-deposit floor for registering a name drops
+  from a hardcoded 200 PAS to 5 PAS (measured cost is ~0.15), registers no longer
+  revert when the chain moves between dry-run and inclusion, duplicate files in a
+  bundle upload once instead of twice, an interrupted register no longer strands
+  the commitment fee, Bulletin re-authorizes on an exhausted-but-unexpired quota,
+  and deploying refuses to silently fall back to the public dev key when a stored
+  session can't be read.
+
+  Additive for us: `deploy()`'s signature is unchanged, every option we pass still
+  exists, and the log banners the progress bar parses are intact.
+
+- adae9d5: Fix deploys failing with `Contract execution would revert during startingPrice on POP_RULES`.
+
+  The DotNS contracts ship in ABI _generations_ that are redeployed behind the same
+  contract addresses, and roll out per environment rather than per release. Generation
+  `v0.5.8-rc1` removed `PopRules.startingPrice()`, so the pinned `bulletin-deploy@0.15.0`
+  — which only knows the older generation and calls that function unconditionally — hit a
+  revert on paseo-next-v2 for every deploy, dev mode included. Because the addresses never
+  changed, this was invisible to any version diff of `environments.json`.
+
+  Bumps `bulletin-deploy` to `0.18.4`, which probes the live generation at connect time and
+  supports all three.
+
+  Also fixes the domain-availability preflight, which constructed `DotNS` and connected with
+  only an RPC URL. Without a contract map it fell back to built-in defaults whose `POP_RULES`
+  has no code on this network, so 0.16+'s generation probe failed with "No contract deployed
+  at this address". It now resolves the env's contracts from bulletin-deploy's own
+  `environments.json` and passes them (plus `environmentId`) to `connect()`, matching what the
+  deploy path already did. The divergence guard in `config.test.ts` now asserts that contract
+  map exists upstream, so a catalog change fails in CI rather than mid-deploy.
+
+- f0d357a: Ask the personhood verifier the registry actually uses before blocking a
+  command.
+
+  `playground deploy`, `deploy-all`, `mod` and `decentralize` refused with
+  "Join the competition first" for users whose publish the chain would have
+  accepted. The gate read `getRootAccount` from the identity spine, but the
+  registry does not consult the spine — it consults whatever `set_verifier`
+  names, which on the current deployment is an open verifier that accepts every
+  account. The CLI was enforcing a stricter rule than the chain, against a
+  different contract.
+
+  The gate now resolves `registry.getVerifier()` and calls `isVerified` on that
+  address, so it is correct both today and on a competition deployment that
+  wires the spine, with no flag to keep in sync. It asks the verifier a
+  question rather than comparing its address — an address comparison would be
+  correct only until the next verifier implementation.
+
 ## 0.47.0
 
 ### Minor Changes

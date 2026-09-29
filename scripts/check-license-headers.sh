@@ -26,6 +26,11 @@ HEADER='// Copyright (C) Parity Technologies (UK) Ltd.
 '
 
 # git ls-files honors .gitignore, so dist/, node_modules/, target/ are skipped.
+#
+# `.cdm/` is excluded explicitly: its two committed `.d.ts` files are generated
+# by `cdm install` ("do not edit"), and any header we added would be stripped by
+# the next regeneration — turning this check red on a routine `cdm i`. They are
+# committed so CI can typecheck contract call sites, not as authored source.
 mode="${1:-check}"
 missing=()
 total=0
@@ -39,7 +44,7 @@ while IFS= read -r f; do
      || ! grep -q 'Copyright (C) Parity Technologies' "$f"; then
     missing+=("$f")
   fi
-done < <(git ls-files '*.ts' '*.tsx' '*.rs')
+done < <(git ls-files '*.ts' '*.tsx' '*.rs' | grep -v '^\.cdm/')
 
 if [[ ${#missing[@]} -eq 0 ]]; then
   echo "All ${total} source files have the Apache-2.0 SPDX header."

@@ -88,7 +88,15 @@ export function productScopedAdapter<A extends { appId: string }>(adapter: A): A
  */
 export const PLAYGROUND_RESOURCES: AllocatableResource[] = [
     { tag: "BulletInAllowance", value: undefined },
-    { tag: "SmartContractAllowance", value: 0 },
+    // The destination is a TAGGED union (`Index` | `Raw`), not a bare number.
+    // A bare `0` still reaches the phone and grants correctly, so the grant
+    // looks fine — but the SDK sub-keys its allowance cache by destination
+    // (`cacheKey` -> `smartContractDest`), and an untagged value falls through
+    // to the `Raw` branch and hexes `undefined`. Every later cache read then
+    // dies with `undefined is not an object (evaluating 'bytes.length')`,
+    // which surfaces as `playground login` reporting "allowances ✕" on a
+    // perfectly healthy account. Index 0 is the default product account.
+    { tag: "SmartContractAllowance", value: { tag: "Index", value: 0 } },
 ];
 
 export interface AllocationSummary {

@@ -65,16 +65,17 @@ describe("buildSummaryView", () => {
         });
         expect(view.totalApprovals).toBe(0);
         expect(view.approvalLines).toEqual([]);
-        // Without claimedOwnerH160, no "App owner" row is added.
+        // Without userSessionH160, no "App owner" row is added.
         expect(view.rows.find((r) => r.label === "App owner")).toBeUndefined();
     });
 
-    it("dev mode with playground surfaces the claimed owner row when a session H160 is set", () => {
-        // Headline scenario: user did `dot login`, chose dev signer mode.
-        // The summary must tell them which H160 will be recorded as the
-        // app owner so they can trust that MyApps will resolve their app
-        // — without this row, the user sees "0 phone taps" and a blank
-        // owner with no way to verify their identity will land on chain.
+    it("dev mode with playground warns that the DEV signer owns the app, not the user", () => {
+        // Registry #525 removed `publish`'s owner argument, so a dev-mode
+        // deploy records the DEV signer as owner — the user's app will not
+        // appear in their MyApps. This row previously promised the opposite
+        // ("your account (0x…)"), which is false against the deployed v2
+        // registry. It must warn, and must NOT echo the user's H160 as if it
+        // were going on chain.
         const view = buildSummaryView({
             mode: "dev",
             domain: "my-app.dot",
@@ -82,11 +83,13 @@ describe("buildSummaryView", () => {
             skipBuild: false,
             publishToPlayground: true,
             approvals: [],
-            claimedOwnerH160: "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
+            userSessionH160: "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef",
         });
         expect(view.totalApprovals).toBe(0);
         const ownerRow = view.rows.find((r) => r.label === "App owner");
-        expect(ownerRow?.value).toContain("0xbeefbeef");
+        expect(ownerRow?.value).toContain("not your account");
+        // The user's H160 must not be presented as the recorded owner.
+        expect(ownerRow?.value).not.toContain("0xbeefbeef");
     });
 
     it("shows the chosen tag in the Tag row when publishing to playground", () => {

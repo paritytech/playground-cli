@@ -70,12 +70,19 @@ describe("enforceIdentityGate", () => {
         },
     );
 
-    it("forwards a pre-resolved registry to the gate (so mod doesn't re-resolve)", async () => {
+    /**
+     * Callers pass the client and nothing else. There used to be a second
+     * parameter for a pre-resolved contract; `mod` passed its registry handle
+     * (which has no `isVerified`), the cast hid it from tsc, and every `mod`
+     * run reported "couldn't verify your builder status" on a healthy chain.
+     * The gate resolves the verifier itself now, so that is unrepresentable —
+     * this pins that nothing is forwarded.
+     */
+    it("passes only the client to the gate — no contract can be injected", async () => {
         checkIdentityGateMock.mockResolvedValue({ status: "revealed", productH160: H160 });
-        const registry = { getRootAccount: { query: vi.fn() } };
 
-        await enforceIdentityGate(RAW, registry as any);
+        await enforceIdentityGate(RAW);
 
-        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, { registry });
+        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW);
     });
 });
