@@ -30,7 +30,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dot } from "./helpers/dot.js";
-import { ALICE, E2E_TLD } from "./fixtures/accounts.js";
+import { SIGNER, E2E_TLD } from "./fixtures/accounts.js";
 import { TEST_DOMAIN } from "./fixtures/templates.js";
 
 const tempDirs: string[] = [];
@@ -56,7 +56,7 @@ describe("dot mod — clone", () => {
 		{ timeout: 240_000 },
 		async () => {
 			const cwd = makeTempDir("dot-e2e-mod-cwd-");
-			const result = await dot(["mod", TEST_DOMAIN, "--suri", ALICE.suri], {
+			const result = await dot(["mod", TEST_DOMAIN, "--suri", SIGNER.suri], {
 				cwd,
 				timeout: 240_000,
 			});
@@ -153,7 +153,7 @@ describe("dot mod — registry miss", () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
 		const domain = `nonexistent-domain-xyz-12345.${E2E_TLD}`;
 		const result = await dot(
-			["mod", domain, "--suri", ALICE.suri],
+			["mod", domain, "--suri", SIGNER.suri],
 			{ cwd, timeout: 120_000 },
 		);
 		const output = result.stdout + result.stderr;

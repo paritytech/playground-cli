@@ -32,7 +32,9 @@ vi.mock("../registry.js", () => ({
     getVerifierContract: getVerifierContractMock,
 }));
 
-import { checkIdentityGate } from "./identityGate.js";
+import { checkIdentityGate, resolveActingH160 } from "./identityGate.js";
+import { ss58ToH160 } from "@parity/product-sdk-address";
+import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 
 const ZERO = ("0x" + "00".repeat(32)) as `0x${string}`;
 const REVEALED = ("0x" + "11".repeat(32)) as `0x${string}`;
@@ -161,5 +163,40 @@ describe("checkIdentityGate", () => {
         expect(result.status).toBe("unverifiable");
         expect(handle.adapter.destroy).toHaveBeenCalledTimes(1);
         expect(getVerifierContractMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("checkIdentityGate with an explicit account", () => {
+    it("asks the verifier about that account and never touches the session", async () => {
+        const verifier = fakeVerifier(async () => ({ success: true, value: true }));
+        getVerifierContractMock.mockResolvedValue(verifier);
+
+        const result = await checkIdentityGate({} as any, { ...FAST, account: H160 });
+
+        expect(result).toEqual({ status: "revealed", productH160: H160 });
+        expect(verifier.isVerified.query).toHaveBeenCalledWith(H160);
+        expect(findSessionMock).not.toHaveBeenCalled();
+    });
+
+    it("reports anonymous for that account when the verifier rejects it", async () => {
+        getVerifierContractMock.mockResolvedValue(
+            fakeVerifier(async () => ({ success: true, value: false })),
+        );
+
+        const result = await checkIdentityGate({} as any, { ...FAST, account: H160 });
+
+        expect(result).toEqual({ status: "anonymous", productH160: H160 });
+    });
+});
+
+describe("resolveActingH160", () => {
+    it("defers to the session when no signer was chosen", async () => {
+        expect(await resolveActingH160(undefined)).toBeUndefined();
+        expect(await resolveActingH160({})).toBeUndefined();
+        expect(await resolveActingH160({ signer: "phone" })).toBeUndefined();
+    });
+
+    it("uses the dev publish account for --signer dev", async () => {
+        expect(await resolveActingH160({ signer: "dev" })).toBe(ss58ToH160(DEV_PUBLISH_ADDRESS));
     });
 });

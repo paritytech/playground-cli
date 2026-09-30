@@ -173,7 +173,12 @@ export const deployCommand = new Command("deploy")
             // will use. Blocked is a soft outcome (yellow box, exit 0).
             try {
                 const conn = await getConnection();
-                if (await enforceIdentityGate(conn.raw.assetHub)) {
+                if (
+                    await enforceIdentityGate(conn.raw.assetHub, {
+                        suri: opts.suri,
+                        signer: opts.signer,
+                    })
+                ) {
                     cleanupOnce();
                     process.exitCode = 0;
                     return;
