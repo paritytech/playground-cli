@@ -150,7 +150,16 @@ jobs:
                   fi
                   rustup toolchain install nightly --profile minimal --component rust-src
                   rustup default nightly
-                  curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | bash
+                  # `cdm setup` builds cargo-pvm-contract with `cargo install`
+                  # from OUTSIDE the clone, so the repo's own rust-toolchain.toml
+                  # is ignored and the build gets our floating nightly. Nightly
+                  # 1.101 (2026-09-28) changed never-type fallback (rust#148922)
+                  # and `trie-db` no longer compiles under it. Build the tool on
+                  # the toolchain its repo pins; contract builds stay on nightly.
+                  pvm_toolchain="$(curl -fsSL https://raw.githubusercontent.com/paritytech/cargo-pvm-contract/main/rust-toolchain.toml | sed -n 's/^channel *= *"\(.*\)"/\1/p')"
+                  test -n "$pvm_toolchain"
+                  rustup toolchain install "$pvm_toolchain" --profile minimal
+                  curl -fsSL https://raw.githubusercontent.com/paritytech/contract-dependency-manager/main/install.sh | RUSTUP_TOOLCHAIN="$pvm_toolchain" bash
                   echo "$HOME/.cdm/bin" >> "$GITHUB_PATH"
                   export PATH="$HOME/.cdm/bin:$PATH"
                   command -v cdm
