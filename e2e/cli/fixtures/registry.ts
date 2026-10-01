@@ -21,6 +21,7 @@
 
 import { getTestClient } from "../helpers/chain.js";
 import { getReadOnlyRegistryContract } from "../../../src/utils/registry.js";
+import { getAppMetadataUri } from "../../../src/utils/mod/metadataUri.js";
 import { resolveSigner } from "../../../src/utils/signer.js";
 import { publishToPlayground } from "../../../src/utils/deploy/playground.js";
 import { SIGNER } from "./accounts.js";
@@ -53,25 +54,18 @@ async function getRegistry(): Promise<Registry> {
  * Query the registry for an app entry by domain.
  * Returns null if not found.
  *
- * `getMetadataUri` returns an `Option<String>` shaped as `{ isSome, value }` —
- * always a truthy object regardless of registration. The `isSome` flag is the
- * real discriminator; check it explicitly. (See cdm.json's getMetadataUri ABI.)
+ * Decodes through `getAppMetadataUri`, the CLI's single `getMetadataUri`
+ * decoder. The v2 registry returns a plain string (empty = absent); this
+ * helper used to narrow on a pre-v2 `Option`'s `isSome`, which reads
+ * `undefined` on every call — so every app looked missing and globalSetup
+ * re-registered the template on every run, in every cell at once.
+ * An unexpected shape throws instead of reading as "not found".
  */
 export async function getApp(domain: string): Promise<AppEntry | null> {
-	try {
-		const registry = await getRegistry();
-		const res = await registry.getMetadataUri.query(domain);
-		if (!res.success) return null;
-		const tuple = res.value as { isSome?: boolean; value?: string } | undefined;
-		if (!tuple?.isSome) return null;
-		return {
-			domain,
-			owner: "",
-			metadataUri: String(tuple.value ?? ""),
-		};
-	} catch {
-		return null;
-	}
+	const registry = await getRegistry();
+	const metadataUri = await getAppMetadataUri(registry, domain);
+	if (metadataUri === null) return null;
+	return { domain, owner: "", metadataUri };
 }
 
 /**
@@ -129,7 +123,9 @@ export async function getAppCount(): Promise<number> {
 export async function waitForApp(domain: string, timeoutMs = 30_000): Promise<AppEntry> {
 	const start = Date.now();
 	while (Date.now() - start < timeoutMs) {
-		const entry = await getApp(domain);
+		// Tolerate a transient dry-run failure while polling; the final
+		// timeout still reports the miss.
+		const entry = await getApp(domain).catch(() => null);
 		if (entry) return entry;
 		await new Promise((r) => setTimeout(r, 2_000));
 	}

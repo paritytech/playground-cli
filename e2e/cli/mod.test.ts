@@ -30,7 +30,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dot } from "./helpers/dot.js";
-import { ALICE, E2E_TLD } from "./fixtures/accounts.js";
+import { SIGNER, E2E_TLD } from "./fixtures/accounts.js";
 import { TEST_DOMAIN } from "./fixtures/templates.js";
 
 const tempDirs: string[] = [];
@@ -56,7 +56,7 @@ describe("dot mod — clone", () => {
 		{ timeout: 240_000 },
 		async () => {
 			const cwd = makeTempDir("dot-e2e-mod-cwd-");
-			const result = await dot(["mod", TEST_DOMAIN, "--suri", ALICE.suri], {
+			const result = await dot(["mod", TEST_DOMAIN, "--suri", SIGNER.suri], {
 				cwd,
 				timeout: 240_000,
 			});
@@ -133,17 +133,21 @@ describe("dot mod — clone", () => {
 	);
 
 	test(
-		"exits non-zero for unknown domain with no prior session (mod is signer-less)",
+		"asks a caller with no login and no --suri to log in first",
 		{ timeout: 60_000 },
 		async () => {
 			const tempHome = makeTempDir("dot-e2e-mod-home-");
 			const cwd = makeTempDir("dot-e2e-mod-cwd-");
 			const result = await dot(["mod", `some-app.${E2E_TLD}`], { home: tempHome, cwd, timeout: 60_000 });
-			expect(result.exitCode).not.toBe(0);
 			const output = result.stdout + result.stderr;
-			// dot mod is signer-less — it proceeds directly to the registry lookup.
-			// An unknown domain produces: App `some-app.${E2E_TLD}` not found in registry
-			expect(output).toContain("not found in registry");
+			// The builder-identity gate has no account to check: a soft block
+			// (exit 0) that points at `playground login`, before any registry
+			// lookup. Not the "Join the competition" notice, which is for a
+			// signed-in user the verifier rejects.
+			expect(result.exitCode, output).toBe(0);
+			expect(output).toContain("Log in first");
+			expect(output).toContain("playground login");
+			expect(output).not.toContain("not found in registry");
 		},
 	);
 });
@@ -153,7 +157,7 @@ describe("dot mod — registry miss", () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
 		const domain = `nonexistent-domain-xyz-12345.${E2E_TLD}`;
 		const result = await dot(
-			["mod", domain, "--suri", ALICE.suri],
+			["mod", domain, "--suri", SIGNER.suri],
 			{ cwd, timeout: 120_000 },
 		);
 		const output = result.stdout + result.stderr;
