@@ -133,17 +133,21 @@ describe("dot mod — clone", () => {
 	);
 
 	test(
-		"exits non-zero for unknown domain with no prior session (mod is signer-less)",
+		"asks a caller with no login and no --suri to log in first",
 		{ timeout: 60_000 },
 		async () => {
 			const tempHome = makeTempDir("dot-e2e-mod-home-");
 			const cwd = makeTempDir("dot-e2e-mod-cwd-");
 			const result = await dot(["mod", `some-app.${E2E_TLD}`], { home: tempHome, cwd, timeout: 60_000 });
-			expect(result.exitCode).not.toBe(0);
 			const output = result.stdout + result.stderr;
-			// dot mod is signer-less — it proceeds directly to the registry lookup.
-			// An unknown domain produces: App `some-app.${E2E_TLD}` not found in registry
-			expect(output).toContain("not found in registry");
+			// The builder-identity gate has no account to check: a soft block
+			// (exit 0) that points at `playground login`, before any registry
+			// lookup. Not the "Join the competition" notice, which is for a
+			// signed-in user the verifier rejects.
+			expect(result.exitCode, output).toBe(0);
+			expect(output).toContain("Log in first");
+			expect(output).toContain("playground login");
+			expect(output).not.toContain("not found in registry");
 		},
 	);
 });
