@@ -18,13 +18,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mock the gate decision + the Ink render so the test exercises only the
 // mapping contract enforceIdentityGate owns. withSpan is collapsed to a
 // pass-through so the span wrapper doesn't pull in Sentry.
-const { checkIdentityGateMock, renderNoticeMock } = vi.hoisted(() => ({
+const { checkIdentityGateMock, resolveActingH160Mock, renderNoticeMock } = vi.hoisted(() => ({
     checkIdentityGateMock: vi.fn(),
+    resolveActingH160Mock: vi.fn().mockResolvedValue(undefined),
     renderNoticeMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../utils/identity/identityGate.js", () => ({
     checkIdentityGate: checkIdentityGateMock,
+    resolveActingH160: resolveActingH160Mock,
 }));
 
 vi.mock("./IdentityGateNotice.js", () => ({
@@ -43,6 +45,7 @@ const H160 = "0xbeefbeefbeefbeefbeefbeefbeefbeefbeefbeef" as `0x${string}`;
 beforeEach(() => {
     vi.clearAllMocks();
     renderNoticeMock.mockResolvedValue(undefined);
+    resolveActingH160Mock.mockResolvedValue(undefined);
 });
 
 describe("enforceIdentityGate", () => {
@@ -83,6 +86,16 @@ describe("enforceIdentityGate", () => {
 
         await enforceIdentityGate(RAW);
 
-        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW);
+        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, {});
+    });
+
+    it("checks the explicitly chosen signer's account instead of the session", async () => {
+        resolveActingH160Mock.mockResolvedValue(H160);
+        checkIdentityGateMock.mockResolvedValue({ status: "revealed", productH160: H160 });
+
+        await enforceIdentityGate(RAW, { suri: "//Bob" });
+
+        expect(resolveActingH160Mock).toHaveBeenCalledWith({ suri: "//Bob" });
+        expect(checkIdentityGateMock).toHaveBeenCalledWith(RAW, { account: H160 });
     });
 });

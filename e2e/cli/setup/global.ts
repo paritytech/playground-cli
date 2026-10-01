@@ -21,7 +21,8 @@
  * 3. Log test accounts
  */
 
-import { destroyTestClient } from "../helpers/chain.js";
+import { destroyTestClient, getTestClient } from "../helpers/chain.js";
+import { ensureAllowance } from "../../../src/utils/account/allowance.js";
 import { fundDeployerIfLow } from "./fund.js";
 import { ensureTemplateRegistered } from "../fixtures/registry.js";
 import { SIGNER, BOB } from "../fixtures/accounts.js";
@@ -58,6 +59,16 @@ export async function setup() {
 				`Underlying error: ${msg}`,
 			);
 		}
+	}
+
+	// SIGNER also signs the Bulletin metadata `store` for template registration
+	// and dev-mode deploys. Native PAS is not enough: with no Bulletin
+	// authorization the store is rejected as `Invalid.Payment` even at a huge
+	// balance. Soft-fail so a Bulletin hiccup only degrades the tests that use it.
+	try {
+		await ensureAllowance(await getTestClient(), SIGNER.address);
+	} catch (err) {
+		console.warn(`[e2e setup] Bulletin allowance check failed: ${err}`);
 	}
 
 	// Template registration is only consumed by one test (`dot mod` happy

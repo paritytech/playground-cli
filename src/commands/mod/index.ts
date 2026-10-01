@@ -45,16 +45,18 @@ interface FetchedAppMetadata {
 export const modCommand = new Command("mod")
     .description("Mod a playground app — clone the source as a fresh project to customise")
     .argument("[domain]", "App domain (interactive picker if omitted)")
-    // --suri is retained as a no-op for backcompat. `playground mod` is fully
-    // read-only on the chain side now (browse + metadata lookups go through
+    // `playground mod` never signs: browse + metadata lookups go through
     // getReadOnlyRegistryContract with the keyless pallet-revive dry-run
-    // origin), so there's no signer to feed.
-    .option("--suri <suri>", "(deprecated, no-op) Signer secret URI")
-    .action(async (rawDomain: string | undefined, _opts: { suri?: string }) =>
-        runCliCommand("mod", { watchdog: true, hardExit: true }, () => runModCommand(rawDomain)),
+    // origin. --suri only chooses WHICH account the builder-identity gate
+    // checks (default: the logged-in phone session), for headless/CI use.
+    .option("--suri <suri>", "Check builder status for this account instead of the login session")
+    .action(async (rawDomain: string | undefined, opts: { suri?: string }) =>
+        runCliCommand("mod", { watchdog: true, hardExit: true }, () =>
+            runModCommand(rawDomain, opts.suri),
+        ),
     );
 
-export async function runModCommand(rawDomain: string | undefined): Promise<void> {
+export async function runModCommand(rawDomain: string | undefined, suri?: string): Promise<void> {
     try {
         const client = await withSpan("cli.mod.connection", "connect to registry chain", () =>
             getConnection(),
@@ -67,7 +69,7 @@ export async function runModCommand(rawDomain: string | undefined): Promise<void
         // personhood verifier accepts. This also gates `playground init`,
         // which delegates here. Blocked is a soft outcome (yellow box, exit 0).
         //
-        if (await enforceIdentityGate(client.raw.assetHub)) {
+        if (await enforceIdentityGate(client.raw.assetHub, { suri })) {
             process.exitCode = 0;
             return;
         }

@@ -54,7 +54,10 @@ describe("session management", () => {
 	});
 
 	test("corrupted session file does not produce a valid signer", async () => {
-		const sessionFile = join(tempHome, ".polkadot-apps", "dot-cli_SsoSessions.json");
+		// The live session list (host-papp 0.8.7+ renamed it to V3; the older
+		// `dot-cli_SsoSessions.json` name is never read, so corrupting it
+		// tested nothing).
+		const sessionFile = join(tempHome, ".polkadot-apps", "dot-cli_SsoSessionsV3.json");
 		writeFileSync(sessionFile, "CORRUPT_DATA_HERE");
 
 		const result = await dot(
@@ -71,15 +74,14 @@ describe("session management", () => {
 			],
 			{ home: tempHome, timeout: 30_000 },
 		);
-		// Must fail with the deliberate no-session notice. `--signer phone`
-		// with no valid session surfaces NO_SESSION_NOTICE_BODY from
-		// src/commands/deploy/signerNotice.ts — match its distinctive text so a
-		// generic "session" mention in an unrelated stack trace can't satisfy
-		// this. (Pre-0.9 this path emitted SignerNotAvailableError's "No signer
-		// available"; the phone path now shows the friendlier guidance.)
-		expect(result.exitCode).not.toBe(0);
+		// A corrupt session reads as "no session", and the builder-identity
+		// gate runs before signer resolution: it has no account to check, so
+		// it soft-blocks (exit 0) with the log-in notice and nothing is signed.
 		const output = result.stdout + result.stderr;
-		expect(output).toContain("Mobile (phone) signing needs a logged-in session");
+		expect(result.exitCode, output).toBe(0);
+		expect(output).toContain("Log in first");
+		expect(output).toContain("playground login");
+		expect(output).not.toContain("Deploy complete");
 	});
 
 	test("build does not create or modify session files", async () => {
