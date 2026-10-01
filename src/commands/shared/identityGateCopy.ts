@@ -30,11 +30,11 @@ export function identityGateCopy(status: BlockedIdentityStatus): GateNoticeCopy 
     switch (status) {
         case "not-logged-in":
             return {
-                title: "Join the competition first",
+                title: "Log in first",
                 lines: [
-                    "Playground commands are for builders who've joined the competition, so you need to be signed in first.",
+                    "You're not signed in yet. Playground commands are for builders who've joined the competition, and we need to know who you are to check.",
                     "",
-                    "Run `playground login` and scan the QR code with your Polkadot mobile app, then become a builder and join the competition at playground.dot in your desktop app.",
+                    "Run `playground login` and scan the QR code with your Polkadot mobile app. If you haven't yet, become a builder and join the competition at playground.dot in your desktop app.",
                 ],
             };
         case "anonymous":

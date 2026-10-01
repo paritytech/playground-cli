@@ -165,7 +165,7 @@ export const decentralizeCommand = new Command("decentralize")
             // outcome (yellow box, exit 0); release the shared connection we
             // primed for the read before returning.
             const conn = await getConnection();
-            if (await enforceIdentityGate(conn.raw.assetHub)) {
+            if (await enforceIdentityGate(conn.raw.assetHub, { suri: opts.suri })) {
                 destroyConnection();
                 process.exitCode = 0;
                 return;

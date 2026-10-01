@@ -151,7 +151,7 @@ async function runDeployAll(opts: DeployAllOpts): Promise<void> {
         // joined the competition may deploy. Runs before signer resolution;
         // reuses the shared connection. Blocked is a soft outcome (exit 0).
         const conn = await getConnection();
-        if (await enforceIdentityGate(conn.raw.assetHub)) {
+        if (await enforceIdentityGate(conn.raw.assetHub, { suri: opts.suri, signer: mode })) {
             cleanupOnce();
             process.exitCode = 0;
             return;

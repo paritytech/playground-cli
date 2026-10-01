@@ -28,6 +28,7 @@ import { parseArgs } from "node:util";
 import { getEnvTld } from "../src/config.js";
 import { destroyConnection } from "../src/utils/connection.js";
 import { checkAllowance, ensureAllowance } from "../src/utils/account/allowance.js";
+import { getAppMetadataUri } from "../src/utils/mod/metadataUri.js";
 import { publishToPlayground, normalizeDomain } from "../src/utils/deploy/playground.js";
 import { getReadOnlyRegistryContract } from "../src/utils/registry.js";
 import { resolveSigner } from "../src/utils/signer.js";
@@ -151,9 +152,8 @@ async function verifyRegistryEntry(domain: string, metadataCid: string): Promise
 	const registry = await getReadOnlyRegistryContract(client.raw.assetHub);
 
 	for (let attempt = 1; attempt <= REGISTRY_READBACK_ATTEMPTS; attempt++) {
-		const result = await registry.getMetadataUri.query(domain);
-		const value = result.value as { isSome?: boolean; value?: string } | undefined;
-		if (result.success && value?.isSome && value.value === metadataCid) return;
+		const uri = await getAppMetadataUri(registry, domain).catch(() => null);
+		if (uri === metadataCid) return;
 
 		if (attempt < REGISTRY_READBACK_ATTEMPTS) await delay(REGISTRY_READBACK_DELAY_MS);
 	}

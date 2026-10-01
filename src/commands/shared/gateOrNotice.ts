@@ -15,7 +15,11 @@
 
 import type { PolkadotClient } from "polkadot-api";
 import { withSpan } from "../../telemetry.js";
-import { checkIdentityGate } from "../../utils/identity/identityGate.js";
+import {
+    checkIdentityGate,
+    resolveActingH160,
+    type ActingAs,
+} from "../../utils/identity/identityGate.js";
 import { renderIdentityGateNotice } from "./IdentityGateNotice.js";
 
 /**
@@ -26,10 +30,14 @@ import { renderIdentityGateNotice } from "./IdentityGateNotice.js";
  * its own cleanup. Returns `false` when the user is a revealed builder and the
  * command may proceed; nothing is printed on that path (no flash on success).
  */
-export async function enforceIdentityGate(rawAssetHubClient: PolkadotClient): Promise<boolean> {
-    const result = await withSpan("cli.identity-gate", "check builder identity", () =>
-        checkIdentityGate(rawAssetHubClient),
-    );
+export async function enforceIdentityGate(
+    rawAssetHubClient: PolkadotClient,
+    acting?: ActingAs,
+): Promise<boolean> {
+    const result = await withSpan("cli.identity-gate", "check builder identity", async () => {
+        const account = await resolveActingH160(acting);
+        return checkIdentityGate(rawAssetHubClient, account ? { account } : {});
+    });
     if (result.status === "revealed") return false;
     await renderIdentityGateNotice(result.status);
     return true;

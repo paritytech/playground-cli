@@ -35,7 +35,10 @@
  */
 
 import type { PolkadotClient } from "polkadot-api";
+import { ss58ToH160 } from "@parity/product-sdk-address";
 import { findSession, deriveSessionAddresses } from "../auth.js";
+import { resolveSigner } from "../signer.js";
+import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 import { getVerifierContract } from "../registry.js";
 
 export type IdentityGateResult =
@@ -68,7 +71,38 @@ export interface PersonhoodVerifier {
     isVerified: { query(account: `0x${string}`): Promise<VerifiedQueryResult> };
 }
 
+/**
+ * The signer a command was explicitly told to act as. The registry decides
+ * `require_revealed` on `env::caller()` — the account that actually publishes —
+ * so when the caller picked a local key the gate must ask about THAT key, not
+ * about whatever phone session happens to be logged in (there may be none).
+ */
+export interface ActingAs {
+    suri?: string;
+    signer?: "dev" | "phone";
+}
+
+/**
+ * H160 of the explicitly chosen local signer, or `undefined` when the command
+ * acts as the logged-in phone user (the default) and the session decides.
+ */
+export async function resolveActingH160(acting?: ActingAs): Promise<`0x${string}` | undefined> {
+    if (!acting) return undefined;
+    if (acting.suri) {
+        const resolved = await resolveSigner({ suri: acting.suri });
+        try {
+            return ss58ToH160(resolved.address) as `0x${string}`;
+        } finally {
+            resolved.destroy();
+        }
+    }
+    if (acting.signer === "dev") return ss58ToH160(DEV_PUBLISH_ADDRESS) as `0x${string}`;
+    return undefined;
+}
+
 interface GateOptions {
+    /** Check this account instead of the phone session's (see {@link ActingAs}). */
+    account?: `0x${string}`;
     /** Dry-run retry budget. Defaults to 2 (a transient RPC blip shouldn't lock out a builder). */
     attempts?: number;
     /** Delay between retries in ms. Defaults to 250. */
@@ -129,18 +163,22 @@ export async function checkIdentityGate(
     const attempts = Math.max(1, opts.attempts ?? 2);
     const delayMs = opts.delayMs ?? 250;
 
-    const handle = await findSession();
-    if (!handle) return { status: "not-logged-in" };
-
     let productH160: `0x${string}`;
-    try {
-        productH160 = (await deriveSessionAddresses(handle.session)).productH160;
-    } catch (err) {
-        return { status: "unverifiable", detail: describe(err) };
-    } finally {
-        // The signer is never used here — release the adapter so its WebSocket
-        // doesn't keep the event loop alive (mirrors `drip`/`status`).
-        await handle.adapter.destroy().catch(() => {});
+    if (opts.account) {
+        productH160 = opts.account;
+    } else {
+        const handle = await findSession();
+        if (!handle) return { status: "not-logged-in" };
+
+        try {
+            productH160 = (await deriveSessionAddresses(handle.session)).productH160;
+        } catch (err) {
+            return { status: "unverifiable", detail: describe(err) };
+        } finally {
+            // The signer is never used here — release the adapter so its WebSocket
+            // doesn't keep the event loop alive (mirrors `drip`/`status`).
+            await handle.adapter.destroy().catch(() => {});
+        }
     }
 
     try {
