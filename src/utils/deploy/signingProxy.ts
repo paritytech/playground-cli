@@ -24,14 +24,21 @@ import type { PolkadotSigner } from "polkadot-api";
 import type { AllowancePrompt } from "../allowances/bulletin.js";
 
 export type SigningEvent =
-    | { kind: "sign-request"; label: string; step: number }
+    /** `attempt` is 1 for the first request of a step, 2+ for a re-send of the same approval. */
+    | { kind: "sign-request"; label: string; step: number; attempt: number }
     | { kind: "sign-complete"; label: string; step: number }
     | { kind: "sign-error"; label: string; step: number; message: string };
 
 export interface SigningCounter {
-    /** Reserve the next step number. */
-    next(): { step: number };
-    /** How many steps were reserved so far — useful for a final tally. */
+    /**
+     * Reserve a step for a signature request labelled `label`. Repeating the
+     * label of a request that has not completed is a RE-SEND of the same
+     * approval — same step, next attempt — not a new step.
+     */
+    next(label: string): { step: number; attempt: number };
+    /** Mark `step` approved, so the next request is a new step even if it repeats the label. */
+    complete(step: number): void;
+    /** How many distinct steps were reserved so far — useful for a final tally. */
     count(): number;
 }
 
@@ -42,13 +49,31 @@ export interface SigningCounter {
  * that runtime skipped left users on "step 4 of 5" with no fifth step), and
  * RFC-0010 allowance taps are demand-driven so they can't be counted up
  * front. The UI shows "step 1", "step 2", … and never has to guess.
+ *
+ * Steps count APPROVALS, not requests. When the phone does not answer (the
+ * usual cause is the app not being in the foreground, which shows no prompt
+ * at all), bulletin-deploy times out and calls `signTx` again — often while
+ * the first call is still pending, so a "not completed" request is the signal,
+ * not a rejection. Numbering each request made a stall read as progress: a
+ * user who had approved nothing saw "step 3: Link content" on a deploy that
+ * needs two approvals.
  */
 export function createSigningCounter(): SigningCounter {
     let step = 0;
+    let current: { label: string; attempt: number; done: boolean } | null = null;
     return {
-        next() {
+        next(label) {
+            if (current && !current.done && current.label === label) {
+                current.attempt += 1;
+                return { step, attempt: current.attempt };
+            }
             step += 1;
-            return { step };
+            current = { label, attempt: 1, done: false };
+            return { step, attempt: 1 };
+        },
+        complete(completed) {
+            // A late completion of an EARLIER step must not close the current one.
+            if (current && completed === step) current.done = true;
         },
         count() {
             return step;
@@ -73,10 +98,11 @@ export interface WrapOptions {
  */
 export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions): PolkadotSigner {
     const announce = async <T>(fn: () => Promise<T>): Promise<T> => {
-        const { step } = options.counter.next();
-        options.onEvent({ kind: "sign-request", label: options.label, step });
+        const { step, attempt } = options.counter.next(options.label);
+        options.onEvent({ kind: "sign-request", label: options.label, step, attempt });
         try {
             const value = await fn();
+            options.counter.complete(step);
             options.onEvent({ kind: "sign-complete", label: options.label, step });
             return value;
         } catch (err) {
@@ -93,6 +119,45 @@ export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions
                 inner.signTx(callData, signedExtensions, metadata, atBlockNumber, hasher),
             ),
         signBytes: (data) => announce(() => inner.signBytes(data)),
+    };
+}
+
+/**
+ * Wraps the phone signer handed to bulletin-deploy for DotNS, labelling each
+ * `signTx` with the operation it signs. `labels` lists the DotNS approvals in
+ * the order bulletin-deploy fires them (`signerMode.ts::dotnsApprovals`); past
+ * the end of the list we repeat the last label rather than invent an index.
+ *
+ * The label advances on COMPLETED signatures, not on calls: a timed-out
+ * request is re-sent as another `signTx` for the SAME operation (often while
+ * the first is still pending), and counting calls relabelled that retry as the
+ * next operation — a re-sent commitment showed up as "Finalize domain". `max`
+ * keeps a late completion of an abandoned attempt from skipping a label.
+ */
+export function wrapDotnsSigner(
+    inner: PolkadotSigner,
+    labels: string[],
+    counter: SigningCounter,
+    onEvent: (event: SigningEvent) => void,
+): PolkadotSigner {
+    const fallbackLabel = labels[labels.length - 1] ?? "DotNS step";
+    let completed = 0;
+    return {
+        publicKey: inner.publicKey,
+        signTx: async (...args) => {
+            const index = completed;
+            const signed = await wrapSignerWithEvents(inner, {
+                label: labels[index] ?? fallbackLabel,
+                counter,
+                onEvent,
+            }).signTx(...args);
+            completed = Math.max(completed, index + 1);
+            return signed;
+        },
+        signBytes: (data) =>
+            wrapSignerWithEvents(inner, { label: "DotNS signBytes", counter, onEvent }).signBytes(
+                data,
+            ),
     };
 }
 
@@ -114,10 +179,13 @@ export function createApprovalPrompt(
     onEvent: (event: SigningEvent) => void,
 ): AllowancePrompt {
     return (label) => {
-        const { step } = counter.next();
-        onEvent({ kind: "sign-request", label, step });
+        const { step, attempt } = counter.next(label);
+        onEvent({ kind: "sign-request", label, step, attempt });
         return {
-            complete: () => onEvent({ kind: "sign-complete", label, step }),
+            complete: () => {
+                counter.complete(step);
+                onEvent({ kind: "sign-complete", label, step });
+            },
             fail: (message) => onEvent({ kind: "sign-error", label, step, message }),
         };
     };

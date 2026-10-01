@@ -15,6 +15,7 @@
 
 import { Text } from "ink";
 import { Callout } from "./Callout.js";
+import { PHONE_RESEND_HINT, resendNotice } from "./phoneApprovalCopy.js";
 
 export interface PhoneApprovalCalloutProps {
     step: number;
@@ -27,15 +28,25 @@ export interface PhoneApprovalCalloutProps {
      */
     total?: number;
     label: string;
+    /** 2+ when this is a re-send of the same approval; omit (or 1) for a first request. */
+    attempt?: number;
 }
 
-export function PhoneApprovalCallout({ step, total, label }: PhoneApprovalCalloutProps) {
+export function PhoneApprovalCallout({
+    step,
+    total,
+    label,
+    attempt = 1,
+}: PhoneApprovalCalloutProps) {
+    const notice = resendNotice(attempt);
     return (
         <Callout tone="warning" title="Check Your Phone">
             <Text>
                 approve step {step}
                 {total !== undefined ? ` of ${total}` : ""}: <Text bold>{label}</Text>
             </Text>
+            {notice && <Text>{notice}</Text>}
+            {notice && <Text dimColor>{PHONE_RESEND_HINT}</Text>}
         </Callout>
     );
 }
