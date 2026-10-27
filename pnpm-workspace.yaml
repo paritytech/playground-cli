@@ -42,37 +42,29 @@ minimumReleaseAgeExclude:
   - "@novasamatech/storage-adapter@0.10.0"
   - "@novasamatech/scale@0.10.0"
   - "@novasamatech/substrate-slot-sr25519-wasm@0.10.0"
-  - '@parity/cdm-builder@5.0.1'
-  - '@parity/cdm-codegen@0.6.26'
-  - '@parity/cdm-env@2.4.0'
-  - '@parity/product-sdk-chain-client@0.10.0'
-  - '@parity/product-sdk-cloud-storage@0.10.0'
-  - '@parity/product-sdk-contracts@0.10.1'
   - '@parity/product-sdk-descriptors@0.9.0'
-  - '@parity/product-sdk-host@0.15.1'
-  - '@parity/product-sdk-keys@0.3.18'
-  - '@parity/product-sdk-local-storage@0.3.4'
-  - '@parity/product-sdk-signer@0.12.1'
-  - '@parity/product-sdk-tx@0.4.1'
-  - '@parity/product-sdk-terminal@0.10.0'
-  - '@parity/product-sdk-host@0.22.0'
-  - '@parity/product-sdk-keys@0.4.0'
-  - '@parity/product-sdk-local-storage@0.3.12'
-  - '@parity/product-sdk-signer@0.15.0'
   - '@parity/product-sdk-utils@0.2.0'
-  - '@parity/cdm-builder@6.0.0'
-  - '@parity/cdm-codegen@0.7.0'
-  - '@parity/cdm-env@3.0.0'
-  - '@parity/cdm-utils@0.5.1'
-  - '@parity/product-sdk-chain-client@0.13.5'
-  - '@parity/product-sdk-cloud-storage@0.13.5'
-  - '@parity/product-sdk-contracts@0.11.5'
-  - '@parity/product-sdk-host@0.30.0'
-  - '@parity/product-sdk-keys@0.5.5'
-  - '@parity/product-sdk-local-storage@0.3.21'
-  - '@parity/product-sdk-signer@0.17.5'
-  - '@parity/product-sdk-terminal@0.13.5'
-  - '@parity/product-sdk-tx@0.5.5'
+
+  # TEMPORARY (papi-3 PR #592) — revert before merge. pnpm 11.5.2's
+  # lockfile check ignores VERSIONED excludes (it rejected the
+  # '@parity/cdm-builder@6.0.0' form it had written itself) but honors
+  # NAME-ONLY ones, so these entries are name-only to let CI install packages
+  # published within the last day. Name-only exempts every future version
+  # from the age gate: drop this block (the versions will have aged) together
+  # with the bulletin-deploy re-pin.
+  - '@parity/cdm-builder'
+  - '@parity/cdm-codegen'
+  - '@parity/cdm-env'
+  - '@parity/cdm-utils'
+  - '@parity/product-sdk-chain-client'
+  - '@parity/product-sdk-cloud-storage'
+  - '@parity/product-sdk-contracts'
+  - '@parity/product-sdk-host'
+  - '@parity/product-sdk-keys'
+  - '@parity/product-sdk-local-storage'
+  - '@parity/product-sdk-signer'
+  - '@parity/product-sdk-terminal'
+  - '@parity/product-sdk-tx'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
