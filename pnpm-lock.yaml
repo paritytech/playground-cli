@@ -2516,7 +2516,7 @@ packages:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
   bulletin-deploy@git+https://git@github.com:paritytech/bulletin-deploy.git#9c25af04316f2806d0425ff6559c4637d04d4740:
-    resolution: {commit: 9c25af04316f2806d0425ff6559c4637d04d4740, repo: git@github.com:paritytech/bulletin-deploy.git, type: git}
+    resolution: {commit: 9c25af04316f2806d0425ff6559c4637d04d4740, repo: https://github.com/paritytech/bulletin-deploy.git, type: git}
     version: 0.24.0
     engines: {node: '>=22'}
     hasBin: true
