@@ -13,7 +13,7 @@ allowBuilds:
   # (`patch-package || true`) bundling an @novasamatech/sdk-statement@0.6.0 patch.
   # We deny it: our own pnpm patch on that exact package (see patchedDependencies
   # below) already applies the fix, so the postinstall is redundant. Keep at false.
-  "bulletin-deploy": true
+  "bulletin-deploy": false
   esbuild: false
   node-datachannel: false
 
@@ -49,9 +49,10 @@ minimumReleaseAgeExclude:
   # lockfile check ignores VERSIONED excludes (it rejected the
   # '@parity/cdm-builder@6.0.0' form it had written itself) but honors
   # NAME-ONLY ones, so these entries are name-only to let CI install packages
-  # published within the last day. Name-only exempts every future version
-  # from the age gate: drop this block (the versions will have aged) together
-  # with the bulletin-deploy re-pin.
+  # published within the last day (bulletin-deploy: 0.24.0-rc.1, 27 Oct).
+  # Name-only exempts every future version from the age gate: drop this
+  # block once the versions have aged.
+  - 'bulletin-deploy'
   - '@parity/cdm-builder'
   - '@parity/cdm-codegen'
   - '@parity/cdm-env'

@@ -69,8 +69,8 @@ importers:
         specifier: ^9.47.1
         version: 9.47.1
       bulletin-deploy:
-        specifier: git+https://github.com/paritytech/bulletin-deploy.git#9c25af04316f2806d0425ff6559c4637d04d4740
-        version: git+https://git@github.com:paritytech/bulletin-deploy.git#9c25af04316f2806d0425ff6559c4637d04d4740(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
+        specifier: 0.24.0-rc.1
+        version: 0.24.0-rc.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3)
       commander:
         specifier: ^12.0.0
         version: 12.1.0
@@ -1329,9 +1329,6 @@ packages:
   '@parity/product-sdk-signer@0.17.5':
     resolution: {integrity: sha512-5FIwngPQn0ncc2z0gbpLnH2RdyDEVzJIZcx+jTF+ziT80LpIG5FVc6sXZzTsnNjXFwZJrmMEPJ2UIMQNa7VWTQ==}
 
-  '@parity/product-sdk-terminal@0.13.4':
-    resolution: {integrity: sha512-dpb7/lQtPtTWBIuSGtjNVmeMgUXqwStVBl0hQNpyUGArpMi/PebP1F4cqIdN/gWsU8BWkVrjbD2ZYN/d97uYMA==}
-
   '@parity/product-sdk-terminal@0.13.5':
     resolution: {integrity: sha512-wrXZ8I0A7HJKqBq4u/z+DUfhEPVbZcigxjJxj69Wa1DelRP+tTbJYP2EIsyrxONN/B5e6R1kt2qyCdUEsfks+Q==}
 
@@ -1636,9 +1633,6 @@ packages:
 
   '@polkadot-labs/hdkd-helpers@0.0.30':
     resolution: {integrity: sha512-qWmmD6ayj14RenDuDFfjF3sHS7ObqPzwIIMPcSVoDeKFSeQV7RY0HwyhC5CG4i6FoguMzak2dbtjYpNN5XQiwQ==}
-
-  '@polkadot-labs/hdkd-helpers@0.0.31':
-    resolution: {integrity: sha512-BjunfAAlR/sGmBUVIZxgHYTA712oD2YPQhKRRxb45BtGfxdKBjs10hZWqOFxZbq9N4pICXp/1oosGe04znyhvw==}
 
   '@polkadot-labs/hdkd-helpers@0.0.33':
     resolution: {integrity: sha512-7t6eoEnL7HouwHudxI0pxSHsVYIFkqcBvDeigvugJ5uHdQMqr9J0Ao063njwmP//PI3LMzDK5xPndb3oYl1IBg==}
@@ -2515,9 +2509,8 @@ packages:
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
-  bulletin-deploy@git+https://git@github.com:paritytech/bulletin-deploy.git#9c25af04316f2806d0425ff6559c4637d04d4740:
-    resolution: {commit: 9c25af04316f2806d0425ff6559c4637d04d4740, repo: https://github.com/paritytech/bulletin-deploy.git, type: git}
-    version: 0.24.0
+  bulletin-deploy@0.24.0-rc.1:
+    resolution: {integrity: sha512-rb5DsZaL0xufjlO7QDmxo5fmOlCYlgDqfNoiI18Eou94sRxISUijjhiLYiVkcbUIlzvXPOg1VXgkcRpI6OHYiA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -5376,7 +5369,7 @@ snapshots:
       '@libp2p/utils': 7.2.1
       '@noble/ciphers': 2.2.0
       '@noble/curves': 2.2.0
-      '@noble/hashes': 2.2.0
+      '@noble/hashes': 2.4.0
       protons-runtime: 5.6.0
       uint8arraylist: 2.4.9
       uint8arrays: 5.1.1
@@ -5999,7 +5992,7 @@ snapshots:
   '@libp2p/crypto@5.1.18':
     dependencies:
       '@libp2p/interface': 3.2.2
-      '@noble/curves': 2.2.0
+      '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
       multiformats: 13.4.2
       protons-runtime: 6.0.1
@@ -6621,7 +6614,7 @@ snapshots:
       nanoevents: 9.1.0
       nanoid: 5.1.11
       neverthrow: 8.2.0
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
+      polkadot-api: 3.3.0(esbuild@0.27.7)(rxjs@7.8.2)
       rxjs: 7.8.2
       scale-ts: 1.6.1
     transitivePeerDependencies:
@@ -6690,7 +6683,7 @@ snapshots:
       '@scure/sr25519': 2.2.0
       nanoid: 5.1.11
       neverthrow: 8.2.0
-      polkadot-api: 2.2.1(esbuild@0.27.7)(rxjs@7.8.2)
+      polkadot-api: 3.3.0(esbuild@0.27.7)(rxjs@7.8.2)
       scale-ts: 1.6.1
     transitivePeerDependencies:
       - bufferutil
@@ -7379,33 +7372,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@parity/product-sdk-terminal@0.13.4(esbuild@0.27.7)(rxjs@7.8.2)':
-    dependencies:
-      '@noble/ciphers': 2.2.0
-      '@noble/curves': 2.4.0
-      '@noble/hashes': 2.4.0
-      '@novasamatech/host-papp': 0.12.0(esbuild@0.27.7)
-      '@novasamatech/statement-store': 0.12.0(patch_hash=214e0c2859afdec395fa98c68c3e5a05e01f2a4ddca8164b8f780b22cccded8d)(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-host': 0.29.0(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-keys': 0.5.4(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-logger': 0.1.2
-      '@parity/product-sdk-signer': 0.17.4(esbuild@0.27.7)(rxjs@7.8.2)
-      '@polkadot-api/signers-common': 0.4.0(rxjs@7.8.2)
-      '@polkadot-api/utils': 0.4.0
-      '@polkadot-api/ws-provider': 0.9.1(rxjs@7.8.2)
-      '@polkadot-labs/hdkd-helpers': 0.0.30
-      nanoid: 5.1.16
-      neverthrow: 8.2.0
-      polkadot-api: 3.3.0(esbuild@0.27.7)(rxjs@7.8.2)
-      qrcode: 1.5.4
-      scale-ts: 1.6.1
-    transitivePeerDependencies:
-      - bufferutil
-      - esbuild
-      - rxjs
-      - supports-color
-      - utf-8-validate
-
   '@parity/product-sdk-terminal@0.13.5(esbuild@0.27.7)(rxjs@7.8.2)':
     dependencies:
       '@noble/ciphers': 2.2.0
@@ -7437,7 +7403,7 @@ snapshots:
     dependencies:
       '@noble/ciphers': 2.2.0
       '@noble/curves': 2.2.0
-      '@noble/hashes': 2.2.0
+      '@noble/hashes': 2.4.0
       '@novasamatech/host-papp': 0.8.11(esbuild@0.27.7)
       '@novasamatech/statement-store': 0.8.11(esbuild@0.27.7)(rxjs@7.8.2)
       '@novasamatech/storage-adapter': 0.8.11
@@ -8031,7 +7997,7 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.4.0
       '@polkadot-api/utils': 0.4.0
-      '@scure/base': 2.2.0
+      '@scure/base': 2.4.0
       scale-ts: 1.6.1
 
   '@polkadot-api/substrate-bindings@0.21.2':
@@ -8110,7 +8076,7 @@ snapshots:
   '@polkadot-labs/hdkd-helpers@0.0.27':
     dependencies:
       '@noble/curves': 2.2.0
-      '@noble/hashes': 2.2.0
+      '@noble/hashes': 2.4.0
       '@scure/base': 2.2.0
       '@scure/sr25519': 1.0.0
       scale-ts: 1.6.1
@@ -8119,16 +8085,8 @@ snapshots:
     dependencies:
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
-      '@scure/base': 2.2.0
-      '@scure/sr25519': 1.0.0
-      scale-ts: 1.6.1
-
-  '@polkadot-labs/hdkd-helpers@0.0.31':
-    dependencies:
-      '@noble/curves': 2.4.0
-      '@noble/hashes': 2.4.0
       '@scure/base': 2.4.0
-      '@scure/sr25519': 2.2.0
+      '@scure/sr25519': 1.0.0
       scale-ts: 1.6.1
 
   '@polkadot-labs/hdkd-helpers@0.0.33':
@@ -8149,11 +8107,11 @@ snapshots:
 
   '@polkadot-labs/hdkd@0.0.26':
     dependencies:
-      '@polkadot-labs/hdkd-helpers': 0.0.30
+      '@polkadot-labs/hdkd-helpers': 0.0.34
 
   '@polkadot-labs/hdkd@0.0.28':
     dependencies:
-      '@polkadot-labs/hdkd-helpers': 0.0.31
+      '@polkadot-labs/hdkd-helpers': 0.0.34
 
   '@polkadot-labs/hdkd@0.0.32':
     dependencies:
@@ -8987,15 +8945,15 @@ snapshots:
       base64-js: 1.5.1
       ieee754: 1.2.1
 
-  bulletin-deploy@git+https://git@github.com:paritytech/bulletin-deploy.git#9c25af04316f2806d0425ff6559c4637d04d4740(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3):
+  bulletin-deploy@0.24.0-rc.1(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))(@polkadot/util@14.0.3)(esbuild@0.27.7)(rxjs@7.8.2)(typescript@5.9.3):
     dependencies:
       '@ipld/car': 5.4.3
       '@ipld/dag-pb': 4.1.5
       '@noble/hashes': 1.8.0
       '@parity/product-sdk-address': 0.1.1
-      '@parity/product-sdk-keys': 0.5.4(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-terminal': 0.13.4(esbuild@0.27.7)(rxjs@7.8.2)
-      '@parity/product-sdk-tx': 0.5.4(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/product-sdk-keys': 0.5.5(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/product-sdk-terminal': 0.13.5(esbuild@0.27.7)(rxjs@7.8.2)
+      '@parity/product-sdk-tx': 0.5.5(esbuild@0.27.7)(rxjs@7.8.2)
       '@polkadot-api/metadata-builders': 0.14.3
       '@polkadot-api/signers-common': 0.4.0(rxjs@7.8.2)
       '@polkadot-api/substrate-bindings': 0.20.3
@@ -9574,7 +9532,7 @@ snapshots:
       get-proto: 1.0.1
       gopd: 1.2.0
       has-symbols: 1.1.0
-      hasown: 2.0.2
+      hasown: 2.0.4
       math-intrinsics: 1.1.0
 
   get-iterator@2.0.1: {}
@@ -10557,7 +10515,7 @@ snapshots:
 
   node-abi@3.89.0:
     dependencies:
-      semver: 7.8.4
+      semver: 7.8.5
 
   node-datachannel@0.29.0:
     dependencies:
