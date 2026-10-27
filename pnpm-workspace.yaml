@@ -13,7 +13,7 @@ allowBuilds:
   # (`patch-package || true`) bundling an @novasamatech/sdk-statement@0.6.0 patch.
   # We deny it: our own pnpm patch on that exact package (see patchedDependencies
   # below) already applies the fix, so the postinstall is redundant. Keep at false.
-  "bulletin-deploy": false
+  "bulletin-deploy": true
   esbuild: false
   node-datachannel: false
 
@@ -60,6 +60,19 @@ minimumReleaseAgeExclude:
   - '@parity/product-sdk-local-storage@0.3.12'
   - '@parity/product-sdk-signer@0.15.0'
   - '@parity/product-sdk-utils@0.2.0'
+  - '@parity/cdm-builder@6.0.0'
+  - '@parity/cdm-codegen@0.7.0'
+  - '@parity/cdm-env@3.0.0'
+  - '@parity/cdm-utils@0.5.1'
+  - '@parity/product-sdk-chain-client@0.13.5'
+  - '@parity/product-sdk-cloud-storage@0.13.5'
+  - '@parity/product-sdk-contracts@0.11.5'
+  - '@parity/product-sdk-host@0.30.0'
+  - '@parity/product-sdk-keys@0.5.5'
+  - '@parity/product-sdk-local-storage@0.3.21'
+  - '@parity/product-sdk-signer@0.17.5'
+  - '@parity/product-sdk-terminal@0.13.5'
+  - '@parity/product-sdk-tx@0.5.5'
 
 overrides:
   # dotns-cli ships a broken publish manifest (file:.papi/descriptors missing
@@ -80,5 +93,5 @@ overrides:
 patchedDependencies:
   # PATCH(playground-cli) — local-only fixes pending upstream. See CLAUDE.md
   # "Two local pnpm patches remain" for what each one does.
-  "@novasamatech/statement-store@0.10.0": "patches/@novasamatech__statement-store@0.10.0.patch"
+  "@novasamatech/statement-store@0.12.0": "patches/@novasamatech__statement-store@0.12.0.patch"
   "@novasamatech/sdk-statement@0.6.0": "patches/@novasamatech__sdk-statement@0.6.0.patch"

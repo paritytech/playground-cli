@@ -14,7 +14,7 @@
 // limitations under the License.
 
 /**
- * Session-backed `PolkadotSigner` for the playground product account.
+ * Session-backed `TxSigner` for the playground product account.
  *
  * Thin wrapper over `@parity/product-sdk-terminal@0.3.0`'s
  * `createSessionSignerForAccount`, which routes transaction signing through
@@ -41,7 +41,7 @@ import {
     type ProductAccountRef,
     type UserSession,
 } from "@parity/product-sdk-terminal";
-import type { PolkadotSigner } from "polkadot-api";
+import { rebuildTxSigner, type TxSigner } from "./txSigner.js";
 
 export type { ProductAccountRef };
 
@@ -89,7 +89,7 @@ export async function derivePlaygroundProductPublicKey(
 export async function createPlaygroundSessionSigner(
     session: UserSession,
     ref: Pick<ProductAccountRef, "productId" | "derivationIndex">,
-): Promise<PolkadotSigner> {
+): Promise<TxSigner> {
     // `publicKey` omitted on purpose: the SDK fetches the subtree and derives
     // it through the same cached path as the display address, so the signer and
     // what we print cannot desync.
@@ -157,7 +157,7 @@ export function isAllowanceExpired(err: unknown): boolean {
  * rejection escapes; any post-restore NoAllowanceError lines simply land on
  * the regular console.error.
  */
-export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigner {
+export function wrapSignerWithSssFastFail(signer: TxSigner): TxSigner {
     function wrap<Args extends unknown[], R>(
         fn: (...args: Args) => Promise<R>,
     ): (...args: Args) => Promise<R> {
@@ -210,9 +210,7 @@ export function wrapSignerWithSssFastFail(signer: PolkadotSigner): PolkadotSigne
         };
     }
 
-    return {
-        publicKey: signer.publicKey,
-        signTx: wrap(signer.signTx.bind(signer)),
-        signBytes: wrap(signer.signBytes.bind(signer)),
-    };
+    // Transaction creation (the signer call itself, since papi 3) and raw
+    // signing both ride the statement store, so both get the fast-fail.
+    return rebuildTxSigner(signer, wrap(signer), wrap(signer.signBytes.bind(signer)));
 }

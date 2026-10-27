@@ -34,7 +34,7 @@
  * where users fund themselves.
  */
 
-import type { PolkadotSigner } from "polkadot-api";
+import type { TxSigner } from "../txSigner.js";
 import { createDevSigner, getDevPublicKey } from "@parity/product-sdk-tx";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import { ss58Encode } from "@parity/product-sdk-address";
@@ -56,7 +56,7 @@ export interface Funder {
     /** SS58 address used to query the funder's current balance. */
     address: string;
     /** Signer used when this funder is selected for a transfer. */
-    signer: PolkadotSigner;
+    signer: TxSigner;
 }
 
 /**

@@ -14,23 +14,23 @@
 // limitations under the License.
 
 /**
- * Unified signer resolution — "give me a PolkadotSigner, I don't care how."
+ * Unified signer resolution — "give me a TxSigner, I don't care how."
  *
  * Dev accounts (--suri //Alice) and QR mobile sessions both produce
- * the same PolkadotSigner interface. Commands call `resolveSigner()`
+ * the same TxSigner interface. Commands call `resolveSigner()`
  * once at startup and thread the result through all operations.
  */
 
 import { ss58Encode } from "@parity/product-sdk-address";
 import { createDevSigner, getDevPublicKey, type DevAccountName } from "@parity/product-sdk-tx";
 import { seedToAccount } from "@parity/product-sdk-keys";
-import type { PolkadotSigner } from "polkadot-api";
+import type { TxSigner } from "./txSigner.js";
 import { getSessionSigner, type SessionHandle, type SessionAddresses } from "./auth.js";
 
 export type SignerSource = "dev" | "session";
 
 export interface ResolvedSigner {
-    signer: PolkadotSigner;
+    signer: TxSigner;
     address: string;
     source: SignerSource;
     /** Present for QR/mobile sessions; absent for local dev/SURI signers. */
@@ -76,7 +76,7 @@ export function parseDevAccountName(suri: string): DevAccountName | null {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 /**
- * Resolve a PolkadotSigner.
+ * Resolve a TxSigner.
  *
  *   1. --suri flag → dev signer (dev name like //Alice, OR a BIP-39 mnemonic
  *      with optional `//<path>` derivation suffix)
