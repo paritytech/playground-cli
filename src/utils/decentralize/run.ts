@@ -210,7 +210,7 @@ export async function runDecentralize(
     const counter = createSigningCounter();
     const emitSigning = (event: SigningEvent) => onEvent?.({ kind: "signing", event });
     // "Check your phone" surface for allocation taps (the first-use Bulletin
-    // slot grant) — they happen outside any PolkadotSigner, so the signer
+    // slot grant) — they happen outside any TxSigner, so the signer
     // wrap below can't see them.
     const allowancePrompt = createApprovalPrompt(counter, emitSigning);
 
@@ -361,7 +361,7 @@ export async function runDecentralize(
 }
 
 /**
- * Wrap the polkadot-app-deploy DotNS auth signer so each `signTx` call surfaces a
+ * Wrap the polkadot-app-deploy DotNS auth signer so each signing call surfaces a
  * "check your phone" lifecycle event labelled by the matching DotNS approval.
  * Mirrors deploy's `maybeWrapAuthForSigning`. Returns `auth` unchanged when
  * there's no signer (dev mode → explicit dev mnemonic signed in-process,

@@ -61,11 +61,14 @@ vi.mock("@parity/product-sdk-terminal", async (importOriginal) => {
 // so tests never write to the real ~/.polkadot-apps.
 const { deriveProductPublicKeyMock, createSessionSignerForAccountMock } = vi.hoisted(() => ({
     deriveProductPublicKeyMock: vi.fn(async () => new Uint8Array(32).fill(0x5a)),
-    createSessionSignerForAccountMock: vi.fn(async () => ({
-        publicKey: new Uint8Array(32).fill(0x5a),
-        signTx: async () => new Uint8Array(),
-        signBytes: async () => new Uint8Array(),
-    })),
+    // A polkadot-api 3 signer: the creation call itself, with publicKey and
+    // signBytes attached.
+    createSessionSignerForAccountMock: vi.fn(async () =>
+        Object.assign(async () => "0x", {
+            publicKey: new Uint8Array(32).fill(0x5a),
+            signBytes: async () => new Uint8Array(),
+        }),
+    ),
 }));
 
 const { recordLoginStampMock } = vi.hoisted(() => ({

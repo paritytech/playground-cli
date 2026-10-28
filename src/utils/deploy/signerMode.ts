@@ -53,6 +53,7 @@ import type { CloudStorageApi } from "@parity/product-sdk-cloud-storage";
 import { seedToAccount } from "@parity/product-sdk-keys";
 import { getBulletinAllowanceSigner, type AllowancePrompt } from "../allowances/bulletin.js";
 import type { ResolvedSigner } from "../signer.js";
+import type { TxSigner } from "../txSigner.js";
 import type { DeployPlan } from "./availability.js";
 
 /**
@@ -130,8 +131,15 @@ export interface DeploySignerSetup {
      * resolving the persisted phone session from `playground login`. For
      * phone mode we inject the user's signer so DotNS registration is paid
      * for by — and recorded against — their account.
+     *
+     * `signer` is narrowed to our own `TxSigner`: bulletin-deploy accepts any
+     * `SignerTxCreator`, but the one we hand it is always ours, and the DotNS
+     * signing proxy wraps it before it goes out.
      */
-    bulletinDeployAuthOptions: Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic">;
+    bulletinDeployAuthOptions: Omit<
+        Pick<DeployOptions, "signer" | "signerAddress" | "mnemonic">,
+        "signer"
+    > & { signer?: TxSigner };
 
     /**
      * Signer used to call the registry publish method for the playground step.
@@ -190,10 +198,10 @@ export interface ResolveOptions {
 
 /**
  * DotNS approvals in the exact order polkadot-app-deploy will fire them. Order
- * matters because `maybeWrapAuthForSigning` in run.ts labels each incoming
- * `signTx` call by its index in this list — the Nth `signTx` is labelled
- * with the Nth entry here, so a mismatch ends up showing "Finalize domain"
- * on the phone when the app is actually asking for commitment.
+ * matters because `maybeWrapAuthForSigning` in run.ts labels the Nth
+ * completed DotNS signature with the Nth entry here (re-sends keep their
+ * label — see `wrapDotnsSigner`), so a mismatch ends up showing "Finalize
+ * domain" on the phone when the app is actually asking for commitment.
  */
 function dotnsApprovals(plan: DeployPlan | undefined): DeployApproval[] {
     // Default to the most common path when the caller hasn't told us the plan

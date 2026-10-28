@@ -242,7 +242,7 @@ describe("getBulletinAllowanceSigner", () => {
 
 describe("getBulletinAllowanceSigner — phone approval prompts", () => {
     // Allocation requests travel over the statement store outside any
-    // PolkadotSigner, so the deploy TUI's signing proxy can't see them. The
+    // TxSigner, so the deploy TUI's signing proxy can't see them. The
     // onPrompt hook is the only "check your phone" surface for the first-use
     // slot grant — these tests pin when it fires and when it stays silent.
     // (There is no longer an Increase prompt: quota is a soft limit.)
