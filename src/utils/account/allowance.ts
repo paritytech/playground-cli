@@ -38,21 +38,36 @@ export const BULLETIN_BYTES = 100_000_000n;
 export const LOW_TX_THRESHOLD = 10;
 
 export interface AllowanceStatus {
+    /** An authorization exists AND has not expired — the only state the chain accepts. */
     authorized: boolean;
     remainingTxs: number;
     remainingBytes: bigint;
 }
 
+/**
+ * Bulletin storage authorization for `address`.
+ *
+ * An EXPIRED authorization reads as unauthorized. The entry stays in
+ * `TransactionStorage.Authorizations` after it lapses, with its quota intact,
+ * but the chain rejects every `store` from the account with `Invalid.Payment`
+ * — so checking existence and quota alone reported a dead authorization as
+ * healthy, `ensureAllowance` never renewed it, and the E2E deployer's metadata
+ * uploads failed for two weeks (Oct 2026). Same predicate as the CLI's own
+ * `isAuthorizationActive`: exists and `expiration > current block`.
+ */
 export async function checkAllowance(
     client: PaseoClient,
     address: string,
 ): Promise<AllowanceStatus> {
-    const raw = await client.bulletin.query.TransactionStorage.Authorizations.getValue(
-        Enum("Account", address),
-        AT_BEST,
-    );
+    const [raw, currentBlock] = await Promise.all([
+        client.bulletin.query.TransactionStorage.Authorizations.getValue(
+            Enum("Account", address),
+            AT_BEST,
+        ),
+        client.bulletin.query.System.Number.getValue(AT_BEST),
+    ]);
 
-    if (!raw) {
+    if (!raw || raw.expiration <= currentBlock) {
         return { authorized: false, remainingTxs: 0, remainingBytes: 0n };
     }
 
@@ -64,6 +79,12 @@ export async function checkAllowance(
     };
 }
 
+/**
+ * Grant (or renew) the testnet Bulletin authorization when it is missing,
+ * expired, or nearly used up. On an expired entry `authorize_account` replaces
+ * it with a fresh one (`expiry = now + AuthorizationPeriod`, counters reset);
+ * on a live one it adds to the caps without moving the expiry.
+ */
 export async function ensureAllowance(client: PaseoClient, address: string): Promise<void> {
     const status = await checkAllowance(client, address);
     if (status.authorized && status.remainingTxs >= LOW_TX_THRESHOLD) return;
