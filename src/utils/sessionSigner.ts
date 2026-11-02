@@ -113,7 +113,10 @@ export async function createPlaygroundSessionSigner(
  *
  * ⚠️ Hardcoded, and only safe because this signer signs Asset Hub transactions
  * only. On a chain with no pipeline 1 the SDK throws "chain declares no
- * transaction-extension pipeline version 1". Read the pipeline from metadata
+ * transaction-extension pipeline version 1". Bulletin is such a chain (it
+ * declares pipeline 0 only), so Bulletin uploads must stay on the slot or dev
+ * keys that `resolveStorageSignerOptions` and `getBulletinAllowanceSigner`
+ * hand out, never on this signer. Read the pipeline from metadata
  * (`Metadata_metadata_at_version(16)`; the default V14 metadata shows one
  * pipeline) before pointing this signer at another chain, and drop the
  * constant once product-sdk picks the signing pipeline itself.
