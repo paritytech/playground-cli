@@ -38,7 +38,10 @@ vi.mock("@parity/product-sdk-tx", () => ({
 const { checkAllowance, ensureAllowance, BULLETIN_BYTES, BULLETIN_TRANSACTIONS, LOW_TX_THRESHOLD } =
     await import("./allowance.js");
 
-function makeClient(authResult: unknown) {
+/** Bulletin best block the mock reports — below every unexpired `expiration` used here. */
+const CURRENT_BLOCK = 50;
+
+function makeClient(authResult: unknown, currentBlock = CURRENT_BLOCK) {
     const authorizeFactory = vi.fn().mockImplementation((args: unknown) => ({
         __kind: "authorize_account",
         args,
@@ -50,6 +53,11 @@ function makeClient(authResult: unknown) {
                     TransactionStorage: {
                         Authorizations: {
                             getValue: vi.fn().mockResolvedValue(authResult),
+                        },
+                    },
+                    System: {
+                        Number: {
+                            getValue: vi.fn().mockResolvedValue(currentBlock),
                         },
                     },
                 },
@@ -119,6 +127,44 @@ describe("checkAllowance", () => {
         expect(result.remainingTxs).toBe(5);
     });
 
+    /**
+     * The entry outlives its expiry with the quota intact, but the chain
+     * rejects every store with Invalid.Payment. Reading it as healthy kept the
+     * E2E deployer on a dead authorization for two weeks.
+     */
+    it("treats an expired authorization as unauthorized, quota notwithstanding", async () => {
+        const { client } = makeClient(
+            {
+                extent: {
+                    transactions: 778,
+                    transactions_allowance: 1000,
+                    bytes: 249_319n,
+                    bytes_allowance: 100_000_000n,
+                },
+                expiration: 2_292_314,
+            },
+            2_503_589,
+        );
+        const result = await checkAllowance(client, "5GrwvaEF...");
+        expect(result).toEqual({ authorized: false, remainingTxs: 0, remainingBytes: 0n });
+    });
+
+    it("treats an authorization expiring at the current block as expired", async () => {
+        const { client } = makeClient(
+            {
+                extent: {
+                    transactions: 0,
+                    transactions_allowance: 1000,
+                    bytes: 0n,
+                    bytes_allowance: 100_000_000n,
+                },
+                expiration: CURRENT_BLOCK,
+            },
+            CURRENT_BLOCK,
+        );
+        expect((await checkAllowance(client, "5GrwvaEF...")).authorized).toBe(false);
+    });
+
     it("wraps the address in Enum('Account', …) when querying Authorizations", async () => {
         const { client } = makeClient(undefined);
         await checkAllowance(client, "5GrwvaEFaddr");
@@ -152,6 +198,29 @@ describe("ensureAllowance", () => {
         await ensureAllowance(client, "5GrwvaEFaddr");
 
         expect(mockCreateDevSigner).toHaveBeenCalledWith("Alice");
+        expect(mockSubmitAndWatch).toHaveBeenCalledTimes(1);
+        expect(authorizeFactory).toHaveBeenCalledWith({
+            who: "5GrwvaEFaddr",
+            transactions: BULLETIN_TRANSACTIONS,
+            bytes: BULLETIN_BYTES,
+        });
+    });
+
+    it("re-grants an expired authorization even with quota left", async () => {
+        mockSubmitAndWatch.mockClear();
+        const { client, authorizeFactory } = makeClient(
+            {
+                extent: {
+                    transactions: 10,
+                    transactions_allowance: 1000,
+                    bytes: 0n,
+                    bytes_allowance: 100_000_000n,
+                },
+                expiration: CURRENT_BLOCK - 1,
+            },
+            CURRENT_BLOCK,
+        );
+        await ensureAllowance(client, "5GrwvaEFaddr");
         expect(mockSubmitAndWatch).toHaveBeenCalledTimes(1);
         expect(authorizeFactory).toHaveBeenCalledWith({
             who: "5GrwvaEFaddr",
