@@ -34,7 +34,7 @@
  *    CLI ≥ v0.40.x). An older repo (e.g. v0.37 / host-papp 0.8.6) silently
  *    fails to decode → getSessionSigner() returns null → "NO SESSION". If you
  *    see that, `git checkout v0.40.2 && pnpm install` (or newer) first.
- *  - Fees: paid in PGAS via ChargeAssetTxPayment (PGAS_FEE), matching how
+ *  - Fees: paid in PGAS via ChargeAssetTxPayment (the `asset` option), matching how
  *    product-account txs are charged. Pattern lifted from polkadot-app-deploy's
  *    PGAS_FEE_OPTIONS (src/dotns.ts).
  *
@@ -70,26 +70,12 @@ const PGAS_ID = 2_000_000_000;
 const DRY_RUN = process.env.DRY_RUN === "1";
 const fmt = (p: bigint) => (Number(p) / 1e10).toFixed(4) + " PAS";
 
-// ChargeAssetTxPayment → PGAS (PalletInstance 50, GeneralIndex = asset id).
-const PGAS_FEE = {
-  customSignedExtensions: {
-    ChargeAssetTxPayment: {
-      value: {
-        tip: 0n,
-        asset_id: {
-          parents: 0,
-          interior: {
-            type: "X2",
-            value: [
-              { type: "PalletInstance", value: 50 },
-              { type: "GeneralIndex", value: BigInt(PGAS_ID) },
-            ],
-          },
-        },
-      },
-    },
-  },
-};
+// Fees in PGAS: ChargeAssetTxPayment with the PGAS location (PalletInstance
+// 50, GeneralIndex = asset id), passed as papi 3's `asset` option at each call
+// below. A hand-rolled `customSignedExtensions.ChargeAssetTxPayment` no longer
+// works: the native-fee entry the standard enhancers add comes first, so it
+// would silently pay in PAS. Written inline so the location literal gets its
+// tuple type from the call.
 
 const handle = await getSessionSigner();
 if (!handle) {
@@ -100,7 +86,7 @@ if (!handle) {
   process.exit(1);
 }
 
-const signer = createPlaygroundSessionSigner(handle.userSession, {
+const signer = await createPlaygroundSessionSigner(handle.userSession, {
   productId: PRODUCT_ID,
   derivationIndex: DERIVATION_INDEX,
 });
@@ -129,14 +115,36 @@ if (pgasSend > 0n) {
   console.log("→ TX1 Assets.transfer PGAS (approve on phone)…");
   const r = await api.tx.Assets
     .transfer({ id: PGAS_ID, target: Enum("Id", DEST), amount: pgasSend })
-    .signAndSubmit(signer, PGAS_FEE);
+    .createAndSubmit(signer, {
+      asset: {
+        parents: 0,
+        interior: {
+          type: "X2",
+          value: [
+            { type: "PalletInstance", value: 50 },
+            { type: "GeneralIndex", value: BigInt(PGAS_ID) },
+          ],
+        },
+      },
+    });
   console.log(`  TX1 ${r.ok ? "OK" : "FAILED"} ${r.txHash}`);
 }
 if (pasSend > 0n) {
   console.log("→ TX2 Balances.transfer_keep_alive PAS (approve on phone)…");
   const r = await api.tx.Balances
     .transfer_keep_alive({ dest: Enum("Id", DEST), value: pasSend })
-    .signAndSubmit(signer, PGAS_FEE);
+    .createAndSubmit(signer, {
+      asset: {
+        parents: 0,
+        interior: {
+          type: "X2",
+          value: [
+            { type: "PalletInstance", value: 50 },
+            { type: "GeneralIndex", value: BigInt(PGAS_ID) },
+          ],
+        },
+      },
+    });
   console.log(`  TX2 ${r.ok ? "OK" : "FAILED"} ${r.txHash}`);
 }
 

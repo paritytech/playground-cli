@@ -14,7 +14,7 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import type { PolkadotSigner } from "polkadot-api";
+import { rebuildTxSigner, type TxCreateArgs, type TxSigner } from "../txSigner.js";
 import {
     createSigningCounter,
     createApprovalPrompt,
@@ -73,22 +73,29 @@ describe("createSigningCounter", () => {
     });
 });
 
-/** A phone signer whose calls stay pending until the test settles them. */
+/**
+ * A phone signer whose calls stay pending until the test settles them. Since
+ * polkadot-api 3 a signer IS the transaction-creation call (resolving to the
+ * signed extrinsic hex), with `publicKey` / `signBytes` attached.
+ */
 function fakePhoneSigner() {
-    const pending: { resolve: (v: Uint8Array) => void; reject: (e: Error) => void }[] = [];
-    const signer: PolkadotSigner = {
-        publicKey: new Uint8Array(32),
-        signTx: () =>
-            new Promise<Uint8Array>((resolve, reject) => pending.push({ resolve, reject })),
-        signBytes: () =>
-            new Promise<Uint8Array>((resolve, reject) => pending.push({ resolve, reject })),
-    };
-    return { signer, pending };
+    const pending: { resolve: (v: string) => void; reject: (e: Error) => void }[] = [];
+    const bytesPending: { resolve: (v: Uint8Array) => void }[] = [];
+    const calls: TxCreateArgs[] = [];
+    const signer: TxSigner = rebuildTxSigner(
+        { publicKey: new Uint8Array(32).fill(7) } as TxSigner,
+        (...args) => {
+            calls.push(args);
+            return new Promise<string>((resolve, reject) => pending.push({ resolve, reject }));
+        },
+        () => new Promise<Uint8Array>((resolve) => bytesPending.push({ resolve })),
+    );
+    return { signer, pending, bytesPending, calls };
 }
 
-const signTxArgs = [new Uint8Array(), {}, new Uint8Array(), 0] as unknown as Parameters<
-    PolkadotSigner["signTx"]
->;
+const createArgs = [{}, {}, {}, false] as unknown as TxCreateArgs;
+/** What papi passes from `getPaymentInfo` / `getEstimatedFees`: a mocked signature. */
+const mockedArgs = [{}, {}, {}, true] as unknown as TxCreateArgs;
 const flush = () => new Promise((r) => setTimeout(r, 0));
 const requests = (events: SigningEvent[]) =>
     events
@@ -101,7 +108,7 @@ const requests = (events: SigningEvent[]) =>
 
 describe("wrapSignerWithEvents", () => {
     it("reports a re-send while the first request is still pending as a retry", async () => {
-        // bulletin-deploy times out and calls signTx again WITHOUT the first
+        // bulletin-deploy times out and calls the signer again WITHOUT the first
         // call ever settling, so "not completed" — not a rejection — is the signal.
         const events: SigningEvent[] = [];
         const { signer, pending } = fakePhoneSigner();
@@ -111,9 +118,9 @@ describe("wrapSignerWithEvents", () => {
             onEvent: (e) => events.push(e),
         });
 
-        void wrapped.signTx(...signTxArgs);
-        const retry = wrapped.signTx(...signTxArgs);
-        pending[1]!.resolve(new Uint8Array([1]));
+        void wrapped(...createArgs);
+        const retry = wrapped(...createArgs);
+        pending[1]!.resolve("0x01");
         await retry;
 
         expect(events).toEqual([
@@ -132,15 +139,51 @@ describe("wrapSignerWithEvents", () => {
             onEvent: (e) => events.push(e),
         });
 
-        const first = wrapped.signTx(...signTxArgs);
+        const first = wrapped(...createArgs);
         pending[0]!.reject(new Error("timed out"));
         await expect(first).rejects.toThrow("timed out");
-        void wrapped.signTx(...signTxArgs);
+        void wrapped(...createArgs);
 
         expect(requests(events)).toEqual([
             { label: "Link content", step: 1, attempt: 1 },
             { label: "Link content", step: 1, attempt: 2 },
         ]);
+    });
+    it("passes fee-estimation calls through without a phone prompt", async () => {
+        // papi 3 invokes the signer with a mocked signature from
+        // getPaymentInfo / getEstimatedFees. Nothing reaches the phone, so a
+        // prompt here would be a phantom approval step.
+        const events: SigningEvent[] = [];
+        const { signer, pending, calls } = fakePhoneSigner();
+        const wrapped = wrapSignerWithEvents(signer, {
+            label: "Publish to Playground registry",
+            counter: createSigningCounter(),
+            onEvent: (e) => events.push(e),
+        });
+
+        const estimate = wrapped(...mockedArgs);
+        pending[0]!.resolve("0xfee");
+        await expect(estimate).resolves.toBe("0xfee");
+
+        expect(events).toEqual([]);
+        expect(calls).toEqual([mockedArgs]);
+    });
+
+    it("stays a callable signer that keeps publicKey and still reports signBytes", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, bytesPending } = fakePhoneSigner();
+        const wrapped = wrapSignerWithEvents(signer, {
+            label: "Sign message",
+            counter: createSigningCounter(),
+            onEvent: (e) => events.push(e),
+        });
+
+        expect(typeof wrapped).toBe("function");
+        expect(wrapped.publicKey).toEqual(signer.publicKey);
+        const signed = wrapped.signBytes(new Uint8Array([9]));
+        bytesPending[0]!.resolve(new Uint8Array([4]));
+        await expect(signed).resolves.toEqual(new Uint8Array([4]));
+        expect(requests(events)).toEqual([{ label: "Sign message", step: 1, attempt: 1 }]);
     });
 });
 
@@ -148,7 +191,7 @@ describe("wrapDotnsSigner", () => {
     const REGISTER = ["Reserve domain", "Finalize domain", "Link content"];
 
     it("keeps a re-sent DotNS request on its own label instead of the next one", async () => {
-        // Regression: labels advanced per signTx CALL, so a re-sent commitment
+        // Regression: labels advanced per signer CALL, so a re-sent commitment
         // was shown as "Finalize domain".
         const events: SigningEvent[] = [];
         const { signer, pending } = fakePhoneSigner();
@@ -156,11 +199,11 @@ describe("wrapDotnsSigner", () => {
             events.push(e),
         );
 
-        void wrapped.signTx(...signTxArgs); // never answered
-        const retry = wrapped.signTx(...signTxArgs);
-        pending[1]!.resolve(new Uint8Array([1]));
+        void wrapped(...createArgs); // never answered
+        const retry = wrapped(...createArgs);
+        pending[1]!.resolve("0x01");
         await retry;
-        void wrapped.signTx(...signTxArgs);
+        void wrapped(...createArgs);
 
         expect(requests(events)).toEqual([
             { label: "Reserve domain", step: 1, attempt: 1 },
@@ -180,12 +223,12 @@ describe("wrapDotnsSigner", () => {
             onEvent: (e) => events.push(e),
         });
 
-        void dotns.signTx(...signTxArgs);
-        void dotns.signTx(...signTxArgs);
-        const third = dotns.signTx(...signTxArgs);
-        pending[2]!.resolve(new Uint8Array([1]));
+        void dotns(...createArgs);
+        void dotns(...createArgs);
+        const third = dotns(...createArgs);
+        pending[2]!.resolve("0x01");
         await third;
-        void publish.signTx(...signTxArgs);
+        void publish(...createArgs);
 
         expect(requests(events)).toEqual([
             { label: "Link content", step: 1, attempt: 1 },
@@ -202,16 +245,31 @@ describe("wrapDotnsSigner", () => {
             events.push(e),
         );
 
-        const abandoned = wrapped.signTx(...signTxArgs);
-        const retry = wrapped.signTx(...signTxArgs);
-        pending[1]!.resolve(new Uint8Array([1]));
+        const abandoned = wrapped(...createArgs);
+        const retry = wrapped(...createArgs);
+        pending[1]!.resolve("0x01");
         await retry;
-        pending[0]!.resolve(new Uint8Array([2]));
+        pending[0]!.resolve("0x02");
         await abandoned;
         await flush();
-        void wrapped.signTx(...signTxArgs);
+        void wrapped(...createArgs);
 
         expect(requests(events).at(-1)).toEqual({ label: "Finalize domain", step: 2, attempt: 1 });
+    });
+
+    it("neither prompts nor advances the label for a fee estimate", async () => {
+        const events: SigningEvent[] = [];
+        const { signer, pending } = fakePhoneSigner();
+        const wrapped = wrapDotnsSigner(signer, REGISTER, createSigningCounter(), (e) =>
+            events.push(e),
+        );
+
+        const estimate = wrapped(...mockedArgs);
+        pending[0]!.resolve("0xfee");
+        await estimate;
+        void wrapped(...createArgs);
+
+        expect(requests(events)).toEqual([{ label: "Reserve domain", step: 1, attempt: 1 }]);
     });
 
     it("repeats the last label past the end of the plan", async () => {
@@ -221,10 +279,10 @@ describe("wrapDotnsSigner", () => {
             events.push(e),
         );
 
-        const first = wrapped.signTx(...signTxArgs);
-        pending[0]!.resolve(new Uint8Array([1]));
+        const first = wrapped(...createArgs);
+        pending[0]!.resolve("0x01");
         await first;
-        void wrapped.signTx(...signTxArgs);
+        void wrapped(...createArgs);
 
         expect(requests(events)).toEqual([
             { label: "Link content", step: 1, attempt: 1 },

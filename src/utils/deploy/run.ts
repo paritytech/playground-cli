@@ -166,7 +166,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
     const counter = createSigningCounter();
     // "Check your phone" surface for RFC-0010 allocation taps (the first-use
     // Bulletin slot grant). These ride the statement store outside any
-    // PolkadotSigner, so the signing proxy below can't see them — without
+    // TxSigner, so the signing proxy below can't see them — without
     // this the phone shows an approval dialog the TUI never mentions.
     const allowancePrompt = createApprovalPrompt(counter, (event) =>
         options.onEvent({ kind: "signing", event }),
@@ -325,7 +325,7 @@ export async function runDeploy(options: RunDeployOptions): Promise<DeployOutcom
 
 /**
  * When polkadot-app-deploy is about to use the user's phone signer for DotNS, wrap
- * it so each `signTx` call surfaces a lifecycle event with the right label.
+ * it so each signing call surfaces a lifecycle event with the right label.
  *
  * Labels are the DotNS-phase entries of `setup.approvals`, in order —
  * `resolveSignerSetup` built that list to match polkadot-app-deploy's actual

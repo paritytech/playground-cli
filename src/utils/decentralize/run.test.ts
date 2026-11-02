@@ -76,6 +76,7 @@ vi.mock("@parity/product-sdk-terminal/host", () => ({
 }));
 import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import type { ResolvedSigner } from "../signer.js";
+import { rebuildTxSigner, type TxSigner } from "../txSigner.js";
 import { DEV_PUBLISH_ADDRESS } from "../deploy/signerMode.js";
 import type { DecentralizeLogEvent } from "./run.js";
 import { describeDeployEvent, LARGE_SITE_FILE_THRESHOLD, runDecentralize } from "./run.js";
@@ -105,11 +106,7 @@ describe("runDecentralize — Bulletin storage signer", () => {
     const slotSigner = { publicKey: SLOT_PUBLIC_KEY } as any;
 
     const sessionSigner: ResolvedSigner = {
-        signer: {
-            publicKey: new Uint8Array(32),
-            signTx: vi.fn(),
-            signBytes: vi.fn(),
-        } as any,
+        signer: rebuildTxSigner({ publicKey: new Uint8Array(32) } as TxSigner, vi.fn(), vi.fn()),
         address: "5Fake",
         source: "session",
         userSession: {} as any,

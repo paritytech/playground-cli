@@ -112,13 +112,10 @@ import { DEFAULT_MNEMONIC } from "bulletin-deploy";
 import { runDeploy, type DeployEvent } from "./run.js";
 import { DEV_PUBLISH_ADDRESS } from "./signerMode.js";
 import type { ResolvedSigner } from "../signer.js";
+import { rebuildTxSigner, type TxSigner } from "../txSigner.js";
 
 const fakeUserSigner: ResolvedSigner = {
-    signer: {
-        publicKey: new Uint8Array(32),
-        signTx: vi.fn(),
-        signBytes: vi.fn(),
-    },
+    signer: rebuildTxSigner({ publicKey: new Uint8Array(32) } as TxSigner, vi.fn(), vi.fn()),
     address: "5Fake",
     source: "session",
     // Host wiring consumed by resolveStorageSignerOptions in phone mode.
@@ -341,7 +338,7 @@ describe("runDeploy", () => {
             bulletinApi,
             // The deploy threads a "check your phone" prompt into the
             // allowance resolution — allocation taps happen outside any
-            // PolkadotSigner, so this hook is their only TUI surface.
+            // TxSigner, so this hook is their only TUI surface.
             onPrompt: expect.any(Function),
         });
         expect(authDestroyMock).toHaveBeenCalledTimes(1);

@@ -23,7 +23,7 @@
  * registry publish call and metadata `store()` — derives its nonce by reading
  * the account's *current* on-chain next-index at submission time
  * (`system_accountNextIndex` inside polkadot-app-deploy; polkadot-api's
- * `signSubmitAndWatch` for the publish path). None of these accept a
+ * `createSubmitAndWatch` for the publish path). None of these accept a
  * caller-supplied incrementing nonce.
  *
  * That is fine for a single deploy, but when several apps deploy concurrently

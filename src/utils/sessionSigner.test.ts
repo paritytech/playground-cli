@@ -17,11 +17,12 @@ import { describe, expect, it, test, vi } from "vitest";
 import { ss58Encode } from "@parity/product-sdk-address";
 import { deriveProductAccountPublicKey, seedToAccount } from "@parity/product-sdk-keys";
 import type { UserSession } from "@parity/product-sdk-terminal";
-import type { PolkadotSigner } from "polkadot-api";
 import { PLAYGROUND_PRODUCT_ID, getEnvTld } from "../config.js";
+import { rebuildTxSigner, type TxCreateArgs, type TxSigner } from "./txSigner.js";
 import {
     INCOMPLETE_SESSION_MESSAGE,
     isAllowanceExpired,
+    PHONE_TX_EXTENSION_VERSION,
     SESSION_EXPIRED_MESSAGE,
     createPlaygroundSessionSigner,
     derivePlaygroundProductPublicKey,
@@ -134,11 +135,13 @@ describe("createPlaygroundSessionSigner", () => {
             rootAccountId: root.publicKey,
             remoteAccountId: new Uint8Array(32).fill(7),
         });
-        createSessionSignerForAccountMock.mockResolvedValue({
-            publicKey: HOST_VECTOR_ACCOUNT,
-            signTx: async () => new Uint8Array(),
-            signBytes: async () => new Uint8Array(),
-        } as unknown as PolkadotSigner);
+        createSessionSignerForAccountMock.mockResolvedValue(
+            rebuildTxSigner(
+                { publicKey: HOST_VECTOR_ACCOUNT } as TxSigner,
+                async () => "0x",
+                async () => new Uint8Array(),
+            ),
+        );
 
         const signer = await createPlaygroundSessionSigner(session, {
             productId: PLAYGROUND_PRODUCT_ID,
@@ -151,6 +154,30 @@ describe("createPlaygroundSessionSigner", () => {
         expect(passedRef).not.toHaveProperty("publicKey");
         expect(signer.publicKey).toEqual(HOST_VECTOR_ACCOUNT);
         expect(ss58Encode(signer.publicKey)).not.toEqual(ss58Encode(new Uint8Array(32).fill(7)));
+    });
+
+    /**
+     * Asset Hub's version-0 pipeline has no `VerifyMultiSignature`, so the
+     * phone's reply to a version-0 request carries no signature and the chain
+     * rejects it as `Invalid.UnknownOrigin`. Version 1 is the one that signs.
+     */
+    test("asks the phone to sign on transaction-extension pipeline 1", async () => {
+        createSessionSignerForAccountMock.mockResolvedValue(
+            rebuildTxSigner(
+                { publicKey: HOST_VECTOR_ACCOUNT } as TxSigner,
+                async () => "0x",
+                async () => new Uint8Array(),
+            ),
+        );
+
+        await createPlaygroundSessionSigner(fakeSession({ rootAccountId: root.publicKey }), {
+            productId: PLAYGROUND_PRODUCT_ID,
+            derivationIndex: 0,
+        });
+
+        const options = createSessionSignerForAccountMock.mock.calls.at(-1)?.[2];
+        expect(PHONE_TX_EXTENSION_VERSION).toBe(1);
+        expect(options).toEqual({ txExtVersion: PHONE_TX_EXTENSION_VERSION });
     });
 
     /**
@@ -200,18 +227,29 @@ describe("wrapSignerWithSssFastFail", () => {
     const NO_ALLOWANCE_LINE =
         "submitRequest failed: NoAllowanceError: Submit failed, no allowance set for account";
 
-    function makeSigner(overrides: Partial<PolkadotSigner>): PolkadotSigner {
-        return {
-            publicKey: new Uint8Array(32).fill(1),
-            signTx: vi.fn(async () => new Uint8Array([1])),
-            signBytes: vi.fn(async () => new Uint8Array([2])),
-            ...overrides,
-        } as PolkadotSigner;
+    /**
+     * Since polkadot-api 3 a signer IS the transaction-creation call, with
+     * `publicKey` / `signBytes` attached; `create` stands in for that call.
+     */
+    function makeSigner(
+        overrides: {
+            create?: (...args: TxCreateArgs) => Promise<string>;
+            signBytes?: (data: Uint8Array) => Promise<Uint8Array>;
+        } = {},
+    ): TxSigner {
+        return rebuildTxSigner(
+            { publicKey: new Uint8Array(32).fill(1) } as TxSigner,
+            overrides.create ?? vi.fn(async () => "0x01"),
+            overrides.signBytes ?? vi.fn(async () => new Uint8Array([2])),
+        );
     }
+
+    // The wrapper forwards papi's creation arguments opaquely.
+    const createArgs = [{}, {}, {}, false] as unknown as TxCreateArgs;
 
     test("rejects fast with the logout/login message when NoAllowanceError is logged", async () => {
         const hanging = makeSigner({
-            signTx: () => {
+            create: () => {
                 console.error(NO_ALLOWANCE_LINE);
                 return new Promise<never>(() => {}); // never settles — the real failure mode
             },
@@ -219,9 +257,7 @@ describe("wrapSignerWithSssFastFail", () => {
         const wrapped = wrapSignerWithSssFastFail(hanging);
 
         const started = Date.now();
-        await expect(wrapped.signTx(new Uint8Array(), {}, new Uint8Array(), 0)).rejects.toThrow(
-            SESSION_EXPIRED_MESSAGE,
-        );
+        await expect(wrapped(...createArgs)).rejects.toThrow(SESSION_EXPIRED_MESSAGE);
         // Well under the SDK's 180s queue timeout / 90s watcher timeout.
         expect(Date.now() - started).toBeLessThan(5_000);
         expect(SESSION_EXPIRED_MESSAGE).toMatch(/playground logout/);
@@ -244,9 +280,9 @@ describe("wrapSignerWithSssFastFail", () => {
         const inner = makeSigner({});
         const wrapped = wrapSignerWithSssFastFail(inner);
 
-        const result = await wrapped.signTx(new Uint8Array(), {}, new Uint8Array(), 0);
+        const result = await wrapped(...createArgs);
 
-        expect(result).toEqual(new Uint8Array([1]));
+        expect(result).toBe("0x01");
         expect(console.error).toBe(original);
         expect(wrapped.publicKey).toBe(inner.publicKey);
     });
@@ -254,13 +290,13 @@ describe("wrapSignerWithSssFastFail", () => {
     test("console.error is restored even after a fast-fail rejection", async () => {
         const original = console.error;
         const hanging = makeSigner({
-            signTx: () => {
+            create: () => {
                 console.error(NO_ALLOWANCE_LINE);
                 return new Promise<never>(() => {});
             },
         });
         const wrapped = wrapSignerWithSssFastFail(hanging);
-        await wrapped.signTx(new Uint8Array(), {}, new Uint8Array(), 0).catch(() => {});
+        await wrapped(...createArgs).catch(() => {});
         expect(console.error).toBe(original);
     });
 
@@ -272,13 +308,13 @@ describe("wrapSignerWithSssFastFail", () => {
         };
         try {
             const inner = makeSigner({
-                signTx: async () => {
+                create: async () => {
                     console.error("some unrelated diagnostic");
-                    return new Uint8Array([1]);
+                    return "0x01";
                 },
             });
             const wrapped = wrapSignerWithSssFastFail(inner);
-            await wrapped.signTx(new Uint8Array(), {}, new Uint8Array(), 0);
+            await wrapped(...createArgs);
             expect(seen).toContain("some unrelated diagnostic");
             // And the nested interception restored OUR replacement, not the
             // process original — interception must be re-entrant because the
@@ -291,14 +327,12 @@ describe("wrapSignerWithSssFastFail", () => {
 
     test("underlying rejection is passed through unchanged", async () => {
         const failing = makeSigner({
-            signTx: async () => {
+            create: async () => {
                 throw new Error("user declined on phone");
             },
         });
         const wrapped = wrapSignerWithSssFastFail(failing);
-        await expect(wrapped.signTx(new Uint8Array(), {}, new Uint8Array(), 0)).rejects.toThrow(
-            "user declined on phone",
-        );
+        await expect(wrapped(...createArgs)).rejects.toThrow("user declined on phone");
     });
 });
 
@@ -312,18 +346,15 @@ describe("expired statement-store allowance", () => {
      * itself travel over the expired channel, so re-pairing is the only way
      * out. A raw SDK error tells the user nothing they can act on.
      */
-    // `signTx` takes 4-5 args in the real signature; the wrapper forwards them
-    // opaquely, so the test calls through a loose alias rather than building
-    // throwaway extrinsic arguments that nothing reads.
-    const callSignTx = (s: PolkadotSigner): Promise<Uint8Array> =>
-        (s.signTx as unknown as (...a: unknown[]) => Promise<Uint8Array>)({});
+    // papi passes the creation arguments; the wrapper forwards them opaquely,
+    // so the test calls through with placeholders nothing reads.
+    const callCreate = (s: TxSigner): Promise<string> =>
+        s(...([{}, {}, {}, false] as unknown as TxCreateArgs));
 
-    function fakeSigner(signTx: () => Promise<Uint8Array>): PolkadotSigner {
-        return {
-            publicKey: new Uint8Array(32).fill(1),
-            signTx,
-            signBytes: signTx,
-        } as unknown as PolkadotSigner;
+    function fakeSigner(create: () => Promise<string>): TxSigner {
+        return rebuildTxSigner({ publicKey: new Uint8Array(32).fill(1) } as TxSigner, create, () =>
+            create().then(() => new Uint8Array()),
+        );
     }
 
     it("maps a thrown AllowanceExpiredError to the re-pair message", async () => {
@@ -335,7 +366,7 @@ describe("expired statement-store allowance", () => {
             }),
         );
 
-        await expect(callSignTx(signer)).rejects.toThrow(SESSION_EXPIRED_MESSAGE);
+        await expect(callCreate(signer)).rejects.toThrow(SESSION_EXPIRED_MESSAGE);
     });
 
     it("keeps the original error as the cause, so the detail is not lost", async () => {
@@ -347,7 +378,7 @@ describe("expired statement-store allowance", () => {
             }),
         );
 
-        await callSignTx(signer).catch((caught: Error) => {
+        await callCreate(signer).catch((caught: Error) => {
             expect(caught.cause).toBe(err);
         });
     });
@@ -359,7 +390,7 @@ describe("expired statement-store allowance", () => {
             }),
         );
 
-        await expect(callSignTx(signer)).rejects.toThrow("message too big");
+        await expect(callCreate(signer)).rejects.toThrow("message too big");
     });
 
     /** `instanceof` is unreliable across duplicate copies in a pnpm tree. */

@@ -14,14 +14,18 @@
 // limitations under the License.
 
 /**
- * Wraps a `PolkadotSigner` so the TUI can render a "check your phone" panel
+ * Wraps a `TxSigner` so the TUI can render a "check your phone" panel
  * around each signing call. We cannot infer this from polkadot-app-deploy's
  * stdout (the log is printed before the signer is invoked and gives no
  * completion hook), so the reliable place to hook is the signer itself.
+ *
+ * Only REAL signing is reported. papi also invokes the signer with a mocked
+ * signature to size a transaction for fee estimation; that never reaches the
+ * phone, so it passes straight through (see `isMockedCreate`).
  */
 
-import type { PolkadotSigner } from "polkadot-api";
 import type { AllowancePrompt } from "../allowances/bulletin.js";
+import { isMockedCreate, rebuildTxSigner, type TxSigner } from "../txSigner.js";
 
 export type SigningEvent =
     /** `attempt` is 1 for the first request of a step, 2+ for a re-send of the same approval. */
@@ -52,7 +56,7 @@ export interface SigningCounter {
  *
  * Steps count APPROVALS, not requests. When the phone does not answer (the
  * usual cause is the app not being in the foreground, which shows no prompt
- * at all), bulletin-deploy times out and calls `signTx` again — often while
+ * at all), bulletin-deploy times out and calls the signer again — often while
  * the first call is still pending, so a "not completed" request is the signal,
  * not a rejection. Numbering each request made a stall read as progress: a
  * user who had approved nothing saw "step 3: Link content" on a deploy that
@@ -91,12 +95,12 @@ export interface WrapOptions {
 }
 
 /**
- * Returns a new `PolkadotSigner` that mirrors `inner` but emits lifecycle
+ * Returns a new `TxSigner` that mirrors `inner` but emits lifecycle
  * events around each signing call. The wrapper does NOT swallow errors — the
  * original rejection still propagates — it only surfaces them to `onEvent`
  * so the TUI can render a red banner.
  */
-export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions): PolkadotSigner {
+export function wrapSignerWithEvents(inner: TxSigner, options: WrapOptions): TxSigner {
     const announce = async <T>(fn: () => Promise<T>): Promise<T> => {
         const { step, attempt } = options.counter.next(options.label);
         options.onEvent({ kind: "sign-request", label: options.label, step, attempt });
@@ -112,59 +116,59 @@ export function wrapSignerWithEvents(inner: PolkadotSigner, options: WrapOptions
         }
     };
 
-    return {
-        publicKey: inner.publicKey,
-        signTx: (callData, signedExtensions, metadata, atBlockNumber, hasher) =>
-            announce(() =>
-                inner.signTx(callData, signedExtensions, metadata, atBlockNumber, hasher),
-            ),
-        signBytes: (data) => announce(() => inner.signBytes(data)),
-    };
+    return rebuildTxSigner(
+        inner,
+        (...args) => (isMockedCreate(args) ? inner(...args) : announce(() => inner(...args))),
+        (data) => announce(() => inner.signBytes(data)),
+    );
 }
 
 /**
  * Wraps the phone signer handed to bulletin-deploy for DotNS, labelling each
- * `signTx` with the operation it signs. `labels` lists the DotNS approvals in
- * the order bulletin-deploy fires them (`signerMode.ts::dotnsApprovals`); past
- * the end of the list we repeat the last label rather than invent an index.
+ * transaction it signs with the operation it is for. `labels` lists the DotNS
+ * approvals in the order bulletin-deploy fires them
+ * (`signerMode.ts::dotnsApprovals`); past the end of the list we repeat the
+ * last label rather than invent an index.
  *
  * The label advances on COMPLETED signatures, not on calls: a timed-out
- * request is re-sent as another `signTx` for the SAME operation (often while
- * the first is still pending), and counting calls relabelled that retry as the
- * next operation — a re-sent commitment showed up as "Finalize domain". `max`
- * keeps a late completion of an abandoned attempt from skipping a label.
+ * request is re-sent as another signer call for the SAME operation (often
+ * while the first is still pending), and counting calls relabelled that retry
+ * as the next operation — a re-sent commitment showed up as "Finalize domain".
+ * `max` keeps a late completion of an abandoned attempt from skipping a label.
+ * Fee-estimation calls (mocked signature) neither prompt nor advance the label.
  */
 export function wrapDotnsSigner(
-    inner: PolkadotSigner,
+    inner: TxSigner,
     labels: string[],
     counter: SigningCounter,
     onEvent: (event: SigningEvent) => void,
-): PolkadotSigner {
+): TxSigner {
     const fallbackLabel = labels[labels.length - 1] ?? "DotNS step";
     let completed = 0;
-    return {
-        publicKey: inner.publicKey,
-        signTx: async (...args) => {
+    return rebuildTxSigner(
+        inner,
+        async (...args) => {
+            if (isMockedCreate(args)) return inner(...args);
             const index = completed;
-            const signed = await wrapSignerWithEvents(inner, {
+            const created = await wrapSignerWithEvents(inner, {
                 label: labels[index] ?? fallbackLabel,
                 counter,
                 onEvent,
-            }).signTx(...args);
+            })(...args);
             completed = Math.max(completed, index + 1);
-            return signed;
+            return created;
         },
-        signBytes: (data) =>
+        (data) =>
             wrapSignerWithEvents(inner, { label: "DotNS signBytes", counter, onEvent }).signBytes(
                 data,
             ),
-    };
+    );
 }
 
 /**
  * Prompt factory for phone taps that are NOT signer calls: RFC-0010
  * resource-allocation requests (the first-use Bulletin allowance grant). They
- * ride the statement store outside any `PolkadotSigner`, so
+ * ride the statement store outside any `TxSigner`, so
  * `wrapSignerWithEvents` never sees them — until this existed the phone
  * showed an approval dialog while the deploy TUI sat silent.
  *

@@ -37,7 +37,7 @@ import {
     type PairingStatus,
     type UserSession,
 } from "@parity/product-sdk-terminal";
-import type { PolkadotSigner } from "polkadot-api";
+import type { TxSigner } from "./txSigner.js";
 import pkg from "../../package.json" with { type: "json" };
 import {
     DAPP_ID,
@@ -144,7 +144,7 @@ function newestSession(sessions: UserSession[]): UserSession {
     return sessions[sessions.length - 1];
 }
 
-async function createPlaygroundSigner(session: UserSession): Promise<PolkadotSigner> {
+async function createPlaygroundSigner(session: UserSession): Promise<TxSigner> {
     return createPlaygroundSessionSigner(session, {
         productId: PLAYGROUND_PRODUCT_ID,
         derivationIndex: 0,
@@ -413,7 +413,7 @@ export interface SessionHandle {
      */
     address: string;
     addresses: SessionAddresses;
-    signer: PolkadotSigner;
+    signer: TxSigner;
     userSession: UserSession;
     /**
      * The live terminal adapter that owns the session. RFC-0010 host calls

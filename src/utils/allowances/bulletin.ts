@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { PolkadotSigner } from "polkadot-api";
+import type { TxSigner } from "../txSigner.js";
 import { ss58Encode } from "@parity/product-sdk-address";
 import {
     checkAuthorization,
@@ -71,7 +71,7 @@ export interface AllowancePromptHandle {
 /**
  * Called right before a step that needs a tap on the phone (the first-use
  * slot grant). RFC-0010 allocation requests travel over the
- * statement store outside any `PolkadotSigner`, so the deploy TUI's signing
+ * statement store outside any `TxSigner`, so the deploy TUI's signing
  * proxy cannot see them — without this hook the phone shows an approval
  * dialog while the terminal sits silent.
  * `deploy/signingProxy.ts::createApprovalPrompt` builds a compatible
@@ -141,7 +141,7 @@ export interface BulletinSlotAuthorization {
 /** On-chain authorization status of a slot signer's account (existence + non-expiry). */
 export async function getBulletinSlotAuthorization(
     bulletinApi: CloudStorageApi,
-    slotSigner: PolkadotSigner,
+    slotSigner: TxSigner,
 ): Promise<BulletinSlotAuthorization> {
     const address = ss58Encode(slotSigner.publicKey);
     const [statusResult, currentBlock] = await Promise.all([
@@ -221,7 +221,7 @@ export async function getBulletinAllowanceSigner({
     publishSigner,
     bulletinApi,
     onPrompt,
-}: BulletinAllowanceSignerOptions): Promise<PolkadotSigner> {
+}: BulletinAllowanceSignerOptions): Promise<TxSigner> {
     // Local dev/SURI deploys are the explicit CI escape hatch: the caller
     // supplied a local key and owns making sure it has Bulletin allowance.
     if (publishSigner.source === "dev") return publishSigner.signer;
@@ -239,7 +239,7 @@ export async function getBulletinAllowanceSigner({
     const grantPrompt = cachedSlot
         ? null
         : (onPrompt?.("Grant Bulletin storage allowance") ?? null);
-    let slotSigner: PolkadotSigner;
+    let slotSigner: TxSigner;
     try {
         slotSigner = await ensureSlotAccountSigner(userSession, adapter, BULLETIN_RESOURCE);
         grantPrompt?.complete();
@@ -275,7 +275,7 @@ export async function getBulletinAllowanceSigner({
 export async function getCachedBulletinAllowanceSigner({
     publishSigner,
     bulletinApi,
-}: CachedBulletinAllowanceSignerOptions): Promise<PolkadotSigner> {
+}: CachedBulletinAllowanceSignerOptions): Promise<TxSigner> {
     if (publishSigner.source === "dev") return publishSigner.signer;
 
     const { adapter } = requireSession(publishSigner);
