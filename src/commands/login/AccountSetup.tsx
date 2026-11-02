@@ -19,6 +19,7 @@ import { Row, Section, PhoneApprovalCallout, type MarkKind } from "../../utils/u
 import { getConnection } from "../../utils/connection.js";
 import { getSessionSigner, type SessionHandle } from "../../utils/auth.js";
 import { checkMapping } from "../../utils/account/mapping.js";
+import { resourcesToRequest } from "./allowanceStep.js";
 import { getCachedAllocation, requestResourceAllocation } from "@parity/product-sdk-terminal/host";
 import {
     PLAYGROUND_RESOURCES,
@@ -147,10 +148,12 @@ export function AccountSetup({
             // allocations are requested over the paired session and the SDK
             // caches granted slot keys at
             // ~/.polkadot-apps/<appId>_AllowanceKeys.json. A cache entry is
-            // only written after the wallet returns Allocated, so "cached"
-            // doubles as "granted". Bulletin additionally needs an on-chain
-            // authorization check (the slot key may exist but be unauthorized
-            // or expired). We do NOT re-prompt on low tx/byte quota — Bulletin
+            // only written after the wallet returns Allocated, but it is keyed
+            // by product id, not by account, and survives logout — so a cached
+            // grant can belong to a previous phone account. Each cached entry
+            // is checked against the chain (`resourcesToRequest`): Bulletin by
+            // its slot authorization, smart contracts by the account's Revive
+            // mapping. We do NOT re-prompt on low tx/byte quota — Bulletin
             // `store` treats those counters as soft limits, so a live,
             // unexpired slot is usable regardless of how exhausted they read.
             update(0, { status: "active", value: "checking…", valueTone: "muted" });
@@ -165,15 +168,22 @@ export function AccountSetup({
                 const cached = await Promise.all(
                     PLAYGROUND_RESOURCES.map((r) => getCachedAllocation(adapter, r)),
                 );
-                const bulletinAuth = await cachedBulletinSlotAuthorization(
-                    adapter,
-                    asCloudStorageApi(client.bulletin),
-                ).catch(() => null);
+                const [bulletinAuth, accountMapped] = await Promise.all([
+                    cachedBulletinSlotAuthorization(
+                        adapter,
+                        asCloudStorageApi(client.bulletin),
+                    ).catch(() => null),
+                    // A read error counts as unmapped: the worst case is one
+                    // extra approval dialog, never a skipped grant.
+                    checkMapping(client, address, { attempts: 2, delayMs: 1000 }),
+                ]);
+                const toRequest = resourcesToRequest(PLAYGROUND_RESOURCES, {
+                    cached: cached.map(Boolean),
+                    bulletinUsable: bulletinAuth?.usable === true,
+                    accountMapped,
+                });
 
-                const allReady =
-                    cached.every(Boolean) && bulletinAuth !== null && bulletinAuth.usable;
-
-                if (allReady) {
+                if (toRequest.length === 0) {
                     update(0, {
                         status: "ok",
                         value: "already granted",
@@ -207,11 +217,11 @@ export function AccountSetup({
                     const outcomes = await requestResourceAllocation(
                         userSession,
                         adapter,
-                        PLAYGROUND_RESOURCES,
+                        toRequest,
                     );
                     if (cancelled) return;
                     setPhonePrompt(null);
-                    const summary = summarizeOutcomes(outcomes, PLAYGROUND_RESOURCES);
+                    const summary = summarizeOutcomes(outcomes, toRequest);
 
                     const failure = describeAllocationFailure(summary);
                     if (failure) {
@@ -219,14 +229,14 @@ export function AccountSetup({
                         // decline (Rejected) from the wallet being unable to
                         // provision (NotAvailable, e.g. an out-of-date mobile
                         // build or a full on-chain slot ring). Positional:
-                        // outcomes[i] ↔ PLAYGROUND_RESOURCES[i]. Verbose-gated:
+                        // outcomes[i] ↔ toRequest[i]. Verbose-gated:
                         // the user-facing `failure` line already gives each
                         // bucket its own remedy, and raw tag dumps confuse
                         // users.
                         if (process.env.DOT_DEPLOY_VERBOSE === "1") {
-                            const detail = PLAYGROUND_RESOURCES.map(
-                                (r, i) => `${r.tag}=${outcomes[i]?.tag ?? "missing"}`,
-                            ).join(" ");
+                            const detail = toRequest
+                                .map((r, i) => `${r.tag}=${outcomes[i]?.tag ?? "missing"}`)
+                                .join(" ");
                             console.error(`[allowances] resource allocation outcomes: ${detail}`);
                         }
                         accountSetupOk = false;
@@ -280,7 +290,7 @@ export function AccountSetup({
                               status: "failed",
                               value: "not ready yet",
                               valueTone: "warning",
-                              hint: "Your account isn't ready for smart contracts yet — this usually resolves on its own. Wait a minute, then run `playground login` again. If it keeps failing, run `playground logout`, then `playground login` and approve the allowances on your phone.",
+                              hint: "Your account isn't ready for smart contracts yet — this usually resolves on its own. Wait a minute, then run `playground login` again; if the account is still not set up, it asks your phone to approve the allowance again.",
                           },
                 );
             } catch (err) {
