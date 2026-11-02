@@ -93,8 +93,32 @@ export async function createPlaygroundSessionSigner(
     // `publicKey` omitted on purpose: the SDK fetches the subtree and derives
     // it through the same cached path as the display address, so the signer and
     // what we print cannot desync.
-    return wrapSignerWithSssFastFail(await createSessionSignerForAccount(session, ref));
+    return wrapSignerWithSssFastFail(
+        await createSessionSignerForAccount(session, ref, {
+            txExtVersion: PHONE_TX_EXTENSION_VERSION,
+        }),
+    );
 }
+
+/**
+ * Transaction-extension pipeline the phone signs on.
+ *
+ * Asset Hub runtime 3004000 (paseo-next-v2) declares two pipelines, and only
+ * version 1 carries `VerifyMultiSignature` (the signature) and `AsPgas` (PGAS
+ * fee sponsorship). The SDK defaults to version 0, and on it the phone returns
+ * a v5 general transaction with nowhere to put the signature: every
+ * phone-signed DotNS, registry and contract call fails with
+ * `Invalid.UnknownOrigin` (Nov 2026; reported in paritytech/platform-bugs).
+ * Version 1 was verified end to end on a phone deploy.
+ *
+ * ⚠️ Hardcoded, and only safe because this signer signs Asset Hub transactions
+ * only. On a chain with no pipeline 1 the SDK throws "chain declares no
+ * transaction-extension pipeline version 1". Read the pipeline from metadata
+ * (`Metadata_metadata_at_version(16)`; the default V14 metadata shows one
+ * pipeline) before pointing this signer at another chain, and drop the
+ * constant once product-sdk picks the signing pipeline itself.
+ */
+export const PHONE_TX_EXTENSION_VERSION = 1;
 
 export const SESSION_EXPIRED_MESSAGE =
     "Phone session expired: the statement-store allowance lapses ~2-3 days after login " +

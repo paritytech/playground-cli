@@ -22,6 +22,7 @@ import { rebuildTxSigner, type TxCreateArgs, type TxSigner } from "./txSigner.js
 import {
     INCOMPLETE_SESSION_MESSAGE,
     isAllowanceExpired,
+    PHONE_TX_EXTENSION_VERSION,
     SESSION_EXPIRED_MESSAGE,
     createPlaygroundSessionSigner,
     derivePlaygroundProductPublicKey,
@@ -153,6 +154,30 @@ describe("createPlaygroundSessionSigner", () => {
         expect(passedRef).not.toHaveProperty("publicKey");
         expect(signer.publicKey).toEqual(HOST_VECTOR_ACCOUNT);
         expect(ss58Encode(signer.publicKey)).not.toEqual(ss58Encode(new Uint8Array(32).fill(7)));
+    });
+
+    /**
+     * Asset Hub's version-0 pipeline has no `VerifyMultiSignature`, so the
+     * phone's reply to a version-0 request carries no signature and the chain
+     * rejects it as `Invalid.UnknownOrigin`. Version 1 is the one that signs.
+     */
+    test("asks the phone to sign on transaction-extension pipeline 1", async () => {
+        createSessionSignerForAccountMock.mockResolvedValue(
+            rebuildTxSigner(
+                { publicKey: HOST_VECTOR_ACCOUNT } as TxSigner,
+                async () => "0x",
+                async () => new Uint8Array(),
+            ),
+        );
+
+        await createPlaygroundSessionSigner(fakeSession({ rootAccountId: root.publicKey }), {
+            productId: PLAYGROUND_PRODUCT_ID,
+            derivationIndex: 0,
+        });
+
+        const options = createSessionSignerForAccountMock.mock.calls.at(-1)?.[2];
+        expect(PHONE_TX_EXTENSION_VERSION).toBe(1);
+        expect(options).toEqual({ txExtVersion: PHONE_TX_EXTENSION_VERSION });
     });
 
     /**
