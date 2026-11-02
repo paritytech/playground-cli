@@ -1,5 +1,19 @@
 # playground-cli
 
+## 0.48.5
+
+### Patch Changes
+
+- c74aff6: Move to polkadot-api 3 and the latest product-sdk (terminal 0.13, host 0.30 with
+  truAPI 0.26), together with the matching CDM and bulletin-deploy releases. No
+  change to how commands behave, and existing logins keep working — there is no
+  need to log in again.
+- d764a4b: Fix phone signing on paseo-next-v2. Every transaction approved on the phone
+  (registering a domain, publishing to Playground, deploying contracts) was
+  rejected with `Invalid.UnknownOrigin`, because the CLI asked the Polkadot app to
+  sign on a transaction format that has no room for the signature. The CLI now
+  requests the format that carries the signature and PGAS fee sponsorship.
+
 ## 0.48.4
 
 ### Patch Changes
