@@ -155,7 +155,12 @@ describe("dot mod — clone", () => {
 describe("dot mod — registry miss", () => {
 	test("reports a registry-miss for an unknown domain", { timeout: 120_000 }, async () => {
 		const cwd = makeTempDir("dot-e2e-mod-unknown-");
-		const domain = `nonexistent-domain-xyz-12345.${E2E_TLD}`;
+		// Must pass the DotNS label rules (src/utils/deploy/dotnsRules.ts), or
+		// `mod` rejects it before the registry lookup this test is about. The
+		// old `nonexistent-domain-xyz-12345` broke the "digit suffix must be
+		// exactly two digits" rule and failed every nightly with
+		// "Invalid domain".
+		const domain = `nonexistent-domain-xyz.${E2E_TLD}`;
 		const result = await dot(
 			["mod", domain, "--suri", SIGNER.suri],
 			{ cwd, timeout: 120_000 },

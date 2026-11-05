@@ -37,14 +37,15 @@ describe("diagnostic mode", () => {
 			// where polkadot-app-deploy logs and verbose-mode wraps its output
 			// with "[+<seconds>s] " timestamps (see src/utils/deploy/storage.ts).
 			// Re-deploying a domain SIGNER already owns is the cheapest way
-			// to get there.
+			// to get there. No `--no-build`: the fixture's dist/ is gitignored
+			// and nothing else in this cell builds it, so the CLI must (the
+			// fixture's build is a one-line copy).
 			const result = await dot([
 				"deploy",
 				"--no-contracts",
 				"--signer", "dev",
 				"--domain", E2E_DOMAINS.preflight,
 				"--buildDir", resolve(frontendOnly, "dist"),
-				"--no-build",
 				"--playground",
 				"--private",
 				"--suri", SIGNER.suri,
@@ -81,7 +82,6 @@ describe("diagnostic mode", () => {
 			"--signer", "dev",
 			"--domain", E2E_DOMAINS.preflight,
 			"--buildDir", resolve(frontendOnly, "dist"),
-			"--no-build",
 			"--playground",
 			"--private",
 			"--suri", SIGNER.suri,
