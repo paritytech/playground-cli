@@ -27,7 +27,7 @@
 import { describe, test, expect } from "vitest";
 import { resolve } from "node:path";
 import { dot } from "./helpers/dot.js";
-import { setupModdableFixture } from "./helpers/moddable-setup.js";
+import { MODDABLE_FIXTURE_REPO, setupModdableFixture } from "./helpers/moddable-setup.js";
 import { SIGNER, BOB, E2E_DOMAINS, E2E_TLD } from "./fixtures/accounts.js";
 import { fixturePath } from "./fixtures/templates.js";
 import { getApp, getOwnerAppCount, getOwnerH160 } from "./fixtures/registry.js";
@@ -320,29 +320,32 @@ describe("dot deploy --playground — full pipeline (requires Paseo + IPFS)", ()
 });
 
 // `dot deploy --moddable` — the tagging half of the moddable round-trip.
-// Pre-creates a public GH repo in test setup, runs `--moddable`, and
-// asserts the deploy succeeds + the registry entry exists. The import
+// Force-pushes the fixture to the permanent public repo
+// paritytech/e2e-cli-moddable-fixture in test setup, runs `--moddable`,
+// and asserts the deploy succeeds + the registry entry exists. The import
 // half (`dot mod <domain>`) is covered separately in mod.test.ts.
 //
-// Coverage focus: this is the only cell that exercises the
-// `gh repo create → push → dot deploy --moddable` cold-start sequence
-// — the exact path a Summit attendee takes. The deploy reads
+// Coverage focus: this is the only cell that exercises
+// `push → dot deploy --moddable`. The deploy reads
 // `git remote get-url origin` from the test's temp working dir, HEADs
 // the GH URL, stamps it into bulletin metadata, and writes the registry
-// entry. Requires `GH_TOKEN` on the runner (see e2e.yml — moddable cell
-// only).
+// entry. Creating the repo (the user's own `gh repo create` before this)
+// is not exercised: the CI token is scoped to the one fixture repo and
+// cannot create repositories. Requires `GH_TOKEN` on the runner (see
+// e2e.yml — moddable cell only).
 describe("dot deploy — moddable (requires Paseo + IPFS + GH)", () => {
 	test(
 		"--moddable deploy stamps origin URL into registry metadata",
 		{ timeout: 600_000 },
 		async () => {
-			const runId = process.env.GITHUB_RUN_ID ?? `local-${Date.now()}`;
-			const repoName = `e2e-cli-moddable-${runId}`;
+			// One permanent repo, reused by every run (see moddable-setup.ts):
+			// the CI token can push to it but cannot create or delete repos.
+			const repoName = MODDABLE_FIXTURE_REPO;
 			const repoUrl = `https://github.com/paritytech/${repoName}`;
 			const domain = E2E_DOMAINS.moddable;
 
-			// Sets up a temp working dir with the frontend-only fixture +
-			// freshly-created paritytech/<repoName> with `origin` pointing
+			// Sets up a temp working dir with the frontend-only fixture,
+			// force-pushed to paritytech/<repoName>, with `origin` pointing
 			// to it. Throws (loudly) on `gh repo create` / push failures so
 			// the cell fails with the actual gh error rather than a
 			// downstream "no origin configured" red herring.
@@ -389,13 +392,8 @@ describe("dot deploy — moddable (requires Paseo + IPFS + GH)", () => {
 			const entry = await getApp(`${domain}.${E2E_TLD}`);
 			expect(entry, `registry has no entry for ${domain}.${E2E_TLD}`).not.toBeNull();
 
-			// Deliberately no test-side `gh repo delete` — the weekly
-			// cleanup cron (e2e-cleanup.yml) sweeps repos older than 7
-			// days by topic filter. A `finally` cleanup here would race
-			// the bulletin upload serialisation: deleting the GH repo
-			// before bulletin commits the metadata could in theory
-			// invalidate the URL the CLI just stamped on-chain. Crashed
-			// runs still get cleaned up by the cron.
+			// No cleanup: the fixture repo is permanent and reused by the
+			// next run, so the URL stamped on-chain stays valid.
 		},
 	);
 });

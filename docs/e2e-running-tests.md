@@ -280,12 +280,12 @@ tools/e2e-local.sh -- e2e/cli/mod.test.ts
 | Release smoke | ~3 min |
 | Post-release smoke | ~5 min |
 
-**"The cleanup cron — what does it do?"**
+**"Is there a cleanup cron?"**
 
-`.github/workflows/e2e-cleanup.yml` runs Sunday 04:00 UTC. It is currently a stub
-— there is nothing to sweep until Phase 5e (moddable deploy testing) ships. When
-that lands, it will sweep `e2e-cli-moddable-*` GH repos and registry domains older
-than 14 days.
+No. `nightly-deploy-moddable` reuses one permanent GitHub repo,
+`paritytech/e2e-cli-moddable-fixture`, so runs leave nothing behind. The former
+weekly sweep (`e2e-cleanup.yml`) was removed along with the per-run repos; see
+`docs/e2e-bootstrap.md` §5.
 
 ---
 

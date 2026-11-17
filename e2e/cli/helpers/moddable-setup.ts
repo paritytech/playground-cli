@@ -17,19 +17,18 @@
  * Setup helper for the `nightly-deploy-moddable` cell.
  *
  * Builds a temp working dir containing the source fixture, initialises a
- * fresh git repo, pre-creates a public GH repo at
- * `paritytech/<repoName>`, and pushes the fixture into it so the
- * subsequent `dot deploy --moddable` call has a `origin` URL that
+ * fresh git repo, and force-pushes it into ONE permanent public repo,
+ * `paritytech/e2e-cli-moddable-fixture`, so the subsequent
+ * `dot deploy --moddable` call has an `origin` URL that
  * `assertPublicGitHubRepo()` will accept.
  *
- * Idempotent on the GH repo: if `paritytech/<repoName>` already exists
- * (e.g. from a previous retry attempt within the same workflow run, or a
- * leftover from a crashed prior run), the helper reuses it instead of
- * crashing on "Name already exists". This mirrors the real-user re-run
- * path the CLI itself handles via "using existing origin" — and lets
- * `nick-fields/retry` actually retry without colliding on the run-scoped
- * repo name. The weekly cleanup cron sweeps repos by topic, so test
- * crashes still get tidied up later.
+ * The repo is reused by every run on purpose. Creating a repo per run made
+ * the CI token need org-wide repo creation and `delete_repo` (plus a weekly
+ * sweep that deleted the leftovers). With one fixed repo, `E2E_GH_PAT` is a
+ * fine-grained token scoped to this single repo with Contents: write, and
+ * can neither create nor delete anything. The repo is created once by a
+ * maintainer (see docs/e2e-bootstrap.md); this helper never creates it.
+ * Overlapping runs force-push identical fixture content, which is harmless.
  */
 
 import { execFileSync } from "node:child_process";
@@ -37,8 +36,10 @@ import { cpSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const TOPIC = "e2e-test-fixture";
 const ORG = "paritytech";
+
+/** The permanent fixture repo every moddable run pushes to. */
+export const MODDABLE_FIXTURE_REPO = "e2e-cli-moddable-fixture";
 
 function sh(cmd: string, args: string[], cwd?: string): string {
 	return execFileSync(cmd, args, {
@@ -64,13 +65,13 @@ function ghRepoExists(qualifiedName: string): boolean {
 }
 
 /**
- * Create a fresh moddable test fixture: temp dir, git-init'd source,
- * paired public GH repo with the fixture pushed to `main`. Returns the
- * temp dir path; the caller runs `dot deploy --moddable --dir <returned>`
- * from there.
+ * Prepare a moddable test fixture: temp dir, git-init'd source, force-pushed
+ * to `main` of the permanent `paritytech/<repoName>` repo. Returns the temp
+ * dir path; the caller runs `dot deploy --moddable --dir <returned>` from
+ * there.
  *
  * Requires `gh` on PATH and `GH_TOKEN` set in the environment (the CI cell
- * sets it via `${{ secrets.E2E_GH_PAT }}`).
+ * sets it via `${{ secrets.E2E_GH_PAT }}`), with push access to the repo.
  */
 export function setupModdableFixture(
 	repoName: string,
@@ -101,51 +102,25 @@ export function setupModdableFixture(
 	);
 
 	const qualifiedName = `${ORG}/${repoName}`;
-	if (ghRepoExists(qualifiedName)) {
-		// Reuse path — repo already exists (retry attempt within the same
-		// workflow run, or leftover from a crashed earlier run). Add origin
-		// manually and force-push: fixture content is identical between
-		// attempts, so the prior commit SHA is irrelevant. This matches
-		// what the CLI itself does on re-run ("using existing origin (...)").
-		//
-		// `gh auth setup-git` wires gh's credential helper into git globally
-		// so the subsequent raw `git push` can authenticate to github.com
-		// via GH_TOKEN. `gh repo create --push` does this implicitly; we
-		// have to do it explicitly when bypassing gh repo create.
-		// `setup-git` is idempotent.
-		sh("gh", ["auth", "setup-git"]);
-		sh("git", ["remote", "add", "origin", `https://github.com/${qualifiedName}.git`], workDir);
-		sh("git", ["push", "-u", "origin", "main", "--force"], workDir);
-	} else {
-		// Cold path — fresh `gh repo create --source --push` does origin-add
-		// + initial push in one round-trip, matching the Summit-user flow.
-		sh("gh", [
-			"repo",
-			"create",
-			qualifiedName,
-			"--public",
-			"--description",
-			"playground-cli E2E moddable test fixture (auto-cleaned)",
-			"--source",
-			workDir,
-			"--push",
-		]);
+	if (!ghRepoExists(qualifiedName)) {
+		// Deliberately no `gh repo create` fallback: the CI token is scoped to
+		// this one repo and cannot create repositories. Fail with the fix.
+		throw new Error(
+			`Moddable fixture repo ${qualifiedName} not found (or GH_TOKEN cannot see it). ` +
+				`Create it once: gh repo create ${qualifiedName} --public — see docs/e2e-bootstrap.md.`,
+		);
 	}
 
-	// Topic-tag (idempotent — `--add-topic` is a no-op if already tagged).
-	// `gh repo create` doesn't accept a `--topic` flag today, and the
-	// cleanup cron filters by `--topic e2e-test-fixture` — so without this
-	// edit, the repo would never get swept and would accumulate indefinitely.
-	// Belt-and-braces: if `gh repo edit` fails (rate limit, transient), the
-	// cleanup fallback to name-prefix matching is NOT implemented today, so
-	// this throw is load-bearing.
-	sh("gh", [
-		"repo",
-		"edit",
-		qualifiedName,
-		"--add-topic",
-		TOPIC,
-	]);
+	// Force-push: the fixture content is identical on every run, so the
+	// previous commit is irrelevant. This matches what the CLI itself does on
+	// re-run ("using existing origin (...)").
+	//
+	// `gh auth setup-git` wires gh's credential helper into git globally so
+	// the raw `git push` can authenticate to github.com via GH_TOKEN.
+	// `setup-git` is idempotent.
+	sh("gh", ["auth", "setup-git"]);
+	sh("git", ["remote", "add", "origin", `https://github.com/${qualifiedName}.git`], workDir);
+	sh("git", ["push", "-u", "origin", "main", "--force"], workDir);
 
 	return workDir;
 }

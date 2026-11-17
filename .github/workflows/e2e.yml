@@ -216,8 +216,8 @@ jobs:
                     - cell: nightly-deploy-moddable
                       # source: e2e/cli/deploy.test.ts → describe("dot deploy — moddable …")
                       # Needs `gh` (pre-installed on parity-default + ubuntu-latest runners)
-                      # and GH_TOKEN with repo:create on paritytech/ — set below via the
-                      # E2E_GH_PAT secret. Other cells ignore the env var harmlessly.
+                      # and GH_TOKEN with push access to paritytech/e2e-cli-moddable-fixture
+                      # — set below via the E2E_GH_PAT secret. Other cells ignore it.
                       pattern: "deploy — moddable"
                     - cell: nightly-chaos-rpc
                       # source: e2e/cli/chaos.test.ts → describe("dot deploy — chaos RPC failover")
@@ -246,12 +246,12 @@ jobs:
                   # globalSetup tops up SIGNER from (drawn down before public
                   # Alice, the fallback). Absent → Alice only.
                   MASTER_FUNDER_SEED: ${{ secrets.MASTER_FUNDER_SEED }}
-                  # nightly-deploy-moddable creates a fresh public repo in
-                  # paritytech/ each run + pushes the fixture into it. Other
-                  # cells in this matrix don't consume GH_TOKEN so setting it
-                  # here is harmless. Rotate the underlying PAT (labelled
-                  # "Playground CLI cold start test" on Rebecca's account)
-                  # before 2026-08-20 — 90-day expiry from 2026-05-21.
+                  # nightly-deploy-moddable force-pushes the fixture into the
+                  # one permanent repo paritytech/e2e-cli-moddable-fixture.
+                  # E2E_GH_PAT is a fine-grained token scoped to that repo
+                  # only, with Contents: write: it cannot create, administer
+                  # or delete any repository. See docs/e2e-bootstrap.md.
+                  # Other cells in this matrix don't consume GH_TOKEN.
                   GH_TOKEN: ${{ secrets.E2E_GH_PAT }}
 
             - name: Surface failure detail
@@ -267,20 +267,6 @@ jobs:
                   path: e2e-reports/
                   retention-days: 7
                   if-no-files-found: ignore
-
-            - name: Clean up moddable test fixture repo
-              # Only the moddable cell creates a per-run GH repo; other cells in
-              # this matrix would no-op (the delete would 404). Run on success,
-              # failure, AND cancellation so we never leak a public repo. The
-              # weekly cleanup cron at e2e-cleanup.yml is the backstop, but
-              # deleting here means retries within the same run start clean
-              # and we don't accumulate one orphan per failed nightly.
-              if: always() && matrix.cell == 'nightly-deploy-moddable'
-              continue-on-error: true
-              env:
-                  GH_TOKEN: ${{ secrets.E2E_GH_PAT }}
-              run: |
-                  gh repo delete "paritytech/e2e-cli-moddable-${{ github.run_id }}" --yes 2>/dev/null || true
 
     test-nightly-no-publish:
         name: "E2E · ${{ matrix.cell }}"
