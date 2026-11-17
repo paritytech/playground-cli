@@ -58,6 +58,7 @@ After a registry-contract redeploy, the next CI run restores them automatically.
 | Secret | Required for | Status |
 |---|---|---|
 | `MASTER_FUNDER_SEED` | Dedicated-funder seed — SIGNER top-up in globalSetup + the Funder Balance Check job | Required — must be set |
+| `E2E_GH_PAT` | `nightly-deploy-moddable` — pushes the fixture to `paritytech/e2e-cli-moddable-fixture` | Required for that cell |
 | `SENTRY_AUTH_TOKEN` | Telemetry verification (not yet implemented) | Optional |
 
 `MASTER_FUNDER_SEED` is a BIP-39 mnemonic read at runtime by
@@ -68,7 +69,26 @@ Alice only when it's empty. When unset the chain is just Alice — fine for
 offline/local runs, but CI must set it. Provide it to local runs with
 `export MASTER_FUNDER_SEED=…`.
 
-`GITHUB_TOKEN` (auto-provided) is used by the report job and cleanup cron.
+`E2E_GH_PAT` is a **fine-grained** token, resource owner `paritytech`,
+repository access **Only select repositories → `e2e-cli-moddable-fixture`**,
+permission **Contents: write** (Metadata: read is added automatically). It
+cannot create, administer or delete any repository, and needs nothing more:
+every moddable run force-pushes into that one permanent repo. Create it with
+the pre-filled form below (then pick the repository by hand; the URL can't set
+it), and store it with `gh secret set E2E_GH_PAT --repo paritytech/playground-cli`:
+
+```
+https://github.com/settings/personal-access-tokens/new?name=playground-cli+E2E+moddable&description=Push+access+to+paritytech%2Fe2e-cli-moddable-fixture+for+the+nightly+E2E&target_name=paritytech&expires_in=366&contents=write
+```
+
+The cell fails with `HTTP 401: Bad credentials` when the token has expired, and
+with "Moddable fixture repo … not found" when the repo is missing or the token
+can't see it. Recreate the repo with
+`gh repo create paritytech/e2e-cli-moddable-fixture --public` if it was ever
+deleted. Note the expiry date somewhere: an expired token is what kept this
+cell red from August to November 2026.
+
+`GITHUB_TOKEN` (auto-provided) is used by the report job.
 
 ---
 
@@ -203,14 +223,13 @@ The 9 domains listed in §1 are permanent. Same-owner re-publish by the tool
 or by test runs keeps their metadata current without accumulating new registry
 entries.
 
-### Per-run rotating state (Phase 5e, not yet shipped)
+### Moddable fixture repo (permanent, reused)
 
-When Phase 5e (`nightly-deploy-moddable`) ships, each run will create:
-- A `e2e-cli-moddable-<runId>` registry domain
-- A GitHub repo tagged `e2e-test-fixture`
-
-These are swept by `.github/workflows/e2e-cleanup.yml` (Sunday 04:00 UTC)
-after 14 days. No manual cleanup needed once that phase ships.
+`nightly-deploy-moddable` force-pushes the frontend fixture into the permanent
+public repo `paritytech/e2e-cli-moddable-fixture` on every run and deploys it
+with `--moddable`. Nothing is created per run, so there is nothing to sweep.
+(Until Nov 2026 each run created a `e2e-cli-moddable-<runId>` repo and a weekly
+cron deleted them, which needed a token with `delete_repo`.)
 
 ---
 
